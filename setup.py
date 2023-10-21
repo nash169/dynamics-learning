@@ -9,7 +9,7 @@ setup(
     name="emg-regression",
     version="1.0.0",
     author="Carolina Correia",
-    author_email="carolina.correia@gmail.com",
+    author_email="cgprcorreia@gmail.com",
     description="EMG Regression.",
     long_description=long_description,
     long_description_content_type="text/markdown",

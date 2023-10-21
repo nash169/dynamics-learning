@@ -13,10 +13,11 @@ class Integrator():
         x = state[:dynamics.dim] if len(state.shape) == 1 else state[:,:dynamics.dim]
         v = state[dynamics.dim:] if len(state.shape) == 1 else state[:,dynamics.dim:]
 
-        v = v + self.step*dynamics(state, input)
+        a = dynamics(state, input)
+        v = v + self.step*a
         x = x + self.step*v
 
-        return np.concatenate((x,v))
+        return np.concatenate((x,v)), a
 
     @property
     def step(self):
