@@ -23,7 +23,7 @@ class SphericalPendulum():
 
     def __call__(self, state, input = None):
         u = np.array([0.0,0.0]) if input is None else input
-        x1 = state[0] if len(state.shape) == 1 else state[:,0] 
+        x1 = state[0] if len(state.shape) == 1 else state[:,0]
         x2 = state[1] if len(state.shape) == 1 else state[:,1] 
         v1 = state[2] if len(state.shape) == 1 else state[:,2]
         v2 = state[3] if len(state.shape) == 1 else state[:,3]
