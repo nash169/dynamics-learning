@@ -17,20 +17,24 @@ integrator = Integrator(step=0.01)
 
 # simulate
 freq = 0.5
-T = 5
+T = 10
 
 # 2D case
 t = np.array([0.0])
 x = np.array([[0.0, 0.0, 0.0, 0.0]]) # state vec
-f  = lambda x : np.array([1 * np.sin(2 * np.pi * freq * x), 0.5 * np.sin(2 * np.pi * freq * x)])
+f1 = lambda x : np.array([0.8 * np.sin(2 * np.pi * freq * x), 0.0])
+f2 = lambda x : np.array([0.0, 0.2 * np.sin(2 * np.pi * freq * x)])
+f3 = lambda x : np.array([-0.3 * np.sin(2 * np.pi * freq * x), 0.0])
+
+# f  = lambda x : np.array([1 * np.sin(2 * np.pi * freq * x), 0.5 * np.sin(2 * np.pi * freq * x)])
 # f1 = lambda x : np.array([0.8 * np.sin(2 * np.pi * freq * x), 0.1 * np.sin(2 * np.pi * freq * x)])
 # f2 = lambda x : np.array([0.1 * np.sin(2 * np.pi * freq * x), 0.2 * np.sin(2 * np.pi * freq * x)])
 
-u = np.array([f(t[-1])])
+u = np.array([f1(t[-1])])
 a = np.array([integrator(model, x[-1,:], u[-1])[1]])
 
 while (t[-1] < T):
-    # f = f1 if t[-1] < T/2 else f2
+    f = f1 if t[-1] < T/4 else (f3 if t[-1] > T/3 else f2)
     u = np.append(u, f(t[-1])[np.newaxis,:],axis=0)
     x_, a_ = integrator(model, x[-1,:], u[-1])
     x = np.append(x, x_[np.newaxis,:], axis=0)
@@ -40,8 +44,8 @@ while (t[-1] < T):
 # np.save('data/train_x', u)
 # np.save('data/train_y', x)
 
-np.save('data/test_x', u)
-np.save('data/test_y', x)
+# np.save('data/test_x', u)
+# np.save('data/test_y', x)
 
 fig = plt.figure(figsize=(5,8))
 ax = fig.add_subplot(511)
@@ -65,23 +69,23 @@ plt.tight_layout()
 plt.show()
 
 
-# # Projection on visual interface
-# H_ = np.array([-np.pi/3, np.pi/3, -np.pi/3, np.pi/3])
-# interface = Interface(length=0.5,H=H_,home_loc='center')
+# Projection on visual interface
+H_ = np.array([-np.pi/3, np.pi/3, -np.pi/3, np.pi/3])
+interface = Interface(length=0.5,H=H_,home_loc='center')
 
-# p = interface(x[:,:2])
+p = interface(x[:,:2])
 
-# fig = plt.figure(figsize=(5,8))
-# ax = fig.add_subplot(211)
-# ax.plot(x[:,0]*180/np.pi,x[:,1]*180/np.pi)
-# ax.set_xlabel(r'$\theta$')
-# ax.set_ylabel(r'$\phi$')
-# ax = fig.add_subplot(212)
-# ax.plot(p[:,0],p[:,1])
-# ax.set_xlim([0,interface.d1])
-# ax.set_ylim([interface.d2,0])
+fig = plt.figure(figsize=(5,8))
+ax = fig.add_subplot(211)
+ax.plot(x[:,0]*180/np.pi,x[:,1]*180/np.pi)
+ax.set_xlabel(r'$\theta$')
+ax.set_ylabel(r'$\phi$')
+ax = fig.add_subplot(212)
+ax.plot(p[:,0],p[:,1])
+ax.set_xlim([0,interface.d1])
+ax.set_ylim([interface.d2,0])
  
-# plt.show()
+plt.show()
 
 # # vis_3D_motion(t,u,theta=x[:,0],phi=x[:,1],L = model.length,frame_rate=200)
 # # vis_2D_motion(t,u,theta=x[:,0],L = model.length,frame_rate=200)
