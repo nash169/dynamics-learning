@@ -31,20 +31,17 @@ class LSTM(nn.Module):
     def forward(self, X):
 
         batch_size = X.size(0)
-
         # Initialize hidden state vector and cell state
         h0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(X.device)
         c0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(X.device)
 
-        output, _ = self.lstm(X, (h0, c0))
-        output = output[:, -1, :]
-#        output = F.relu(output)
-        output = F.relu(self.fc_o2y(output))
+        output, _ = self.lstm(X, (h0.detach(), c0.detach()))
+        output = self.fc_o2y(output[:, -1, :])
+        output = F.relu(output)
         output = self.fc_y2c(output)
 
-#        output = F.log_softmax(output)
-
         return output
+    
     
     def process_input(self,x,y,window_size,offset):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
