@@ -4,7 +4,6 @@ import torch
 import os
 import numpy as np
 
-
 class Trainer:
     __options__ = ['epochs', 'batch', 'normalize',
                    'shuffle', 'record_loss', 'print_loss', 'clip_grad', 'load_model']
@@ -75,53 +74,62 @@ class Trainer:
         # Open file
         if self.options_["record_loss"]:
             loss_log = np.empty((0, 3))
+            self.losses = np.array([])
 
         # Scheduler
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=100, threshold=1e-2,
                                                                threshold_mode='rel', cooldown=0, min_lr=0, eps=1e-8, verbose=False)
 
-        # start training
-        for epoch in range(self.options_['epochs']):
-            for iter, (batch_x, batch_y) in enumerate(loader):  # for each training step
-                b_x = torch.autograd.Variable(batch_x, requires_grad=True)
-                b_y = torch.autograd.Variable(batch_y)
+        try:
+            # start training
+            for epoch in range(self.options_['epochs']):
+                epoch_loss = np.array([])
+                for iter, (batch_x, batch_y) in enumerate(loader):  # for each training step
+                    b_x = torch.autograd.Variable(batch_x, requires_grad=True)
+                    b_y = torch.autograd.Variable(batch_y)
 
-                # input x and predict based on x
-                prediction = self.model(b_x)
+                    # clear gradients for next train
+                    self.optimizer.zero_grad()
 
-                # must be (1. nn output, 2. target)
-                loss = self.loss(prediction, b_y)
+                    # input x and predict based on x
+                    prediction = self.model(b_x)
 
+                    # must be (1. nn output, 2. target)
+                    loss = self.loss(prediction, b_y)
+
+                    # Record loss (EPOCH,ITER,LOSS)
+                    if self.options_["record_loss"]:
+                        epoch_loss = np.append(epoch_loss,loss.item())
+                        loss_log = np.append(loss_log, np.array(
+                            [epoch, iter, loss.item()])[np.newaxis, :], axis=0)
+
+                    # backpropagation, compute gradients
+                    loss.backward()
+
+                    # Clip grad if requested
+                    if self.options_["clip_grad"] is not None:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.options_["clip_grad"])
+
+                    # apply gradients
+                    self.optimizer.step()
+
+                    # step scheduler
+                    scheduler.step(loss)
+                    
+                if self.options_["record_loss"]:
+                    self.losses = np.append(self.losses, np.mean(epoch_loss))
+                
                 # Print loss
                 if self.options_["print_loss"]:
-                    print("EPOCH: ", epoch, "ITER: ", iter, "LR: ", self.optimizer.param_groups[0]['lr'],  "LOSS: ", loss.item())
+                    print("EPOCH: ", epoch, " |  LOSS: ", self.losses[-1])
 
-                # Record loss (EPOCH,ITER,LOSS)
-                if self.options_["record_loss"]:
-                    # print(np.array([epoch,iter,loss.item()])[:,np.newaxis])
-                    loss_log = np.append(loss_log, np.array(
-                        [epoch, iter, loss.item()])[np.newaxis, :], axis=0)
-
-                # clear gradients for next train
-                self.optimizer.zero_grad()
-
-                # backpropagation, compute gradients
-                loss.backward()
-
-                # Clip grad if requested
-                if self.options_["clip_grad"] is not None:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.options_["clip_grad"])
-
-                # apply gradients
-                self.optimizer.step()
-
-                # step scheduler
-                scheduler.step(loss)
+        except KeyboardInterrupt:
+            return self.losses
 
         # Close file
         if self.options_["record_loss"]:
-            return loss_log
+            return self.losses
 
     # Model
     @property

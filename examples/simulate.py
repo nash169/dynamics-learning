@@ -16,25 +16,22 @@ model = SphericalPendulum(length=0.5)
 integrator = Integrator(step=0.01)
 
 # simulate
-freq = 0.5
+freq = 0.1
 T = 10
 
 # 2D case
 t = np.array([0.0])
 x = np.array([[0.0, 0.0, 0.0, 0.0]]) # state vec
-f1 = lambda x : np.array([0.8 * np.sin(2 * np.pi * freq * x), 0.0])
+f0 = lambda x: np.array([0.0,0.0])
+f1 = lambda x : np.array([0.3 * np.sin(2 * np.pi * freq * x), 0.0])
 f2 = lambda x : np.array([0.0, 0.2 * np.sin(2 * np.pi * freq * x)])
-f3 = lambda x : np.array([-0.3 * np.sin(2 * np.pi * freq * x), 0.0])
-
-# f  = lambda x : np.array([1 * np.sin(2 * np.pi * freq * x), 0.5 * np.sin(2 * np.pi * freq * x)])
-# f1 = lambda x : np.array([0.8 * np.sin(2 * np.pi * freq * x), 0.1 * np.sin(2 * np.pi * freq * x)])
-# f2 = lambda x : np.array([0.1 * np.sin(2 * np.pi * freq * x), 0.2 * np.sin(2 * np.pi * freq * x)])
+f3 = lambda x : np.array([-0.4 * np.sin(2 * np.pi * freq * x), 0.0])
 
 u = np.array([f1(t[-1])])
 a = np.array([integrator(model, x[-1,:], u[-1])[1]])
 
-while (t[-1] < T):
-    f = f1 if t[-1] < T/4 else (f3 if t[-1] > T/3 else f2)
+while (t[-1] < T+1):
+    f = f0 if t[-1] <=1 else (f1 if t[-1] < T/4 else f2)
     u = np.append(u, f(t[-1])[np.newaxis,:],axis=0)
     x_, a_ = integrator(model, x[-1,:], u[-1])
     x = np.append(x, x_[np.newaxis,:], axis=0)
