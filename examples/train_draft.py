@@ -4,7 +4,6 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from emg_regression.approximators.lstm import LSTM
-from emg_regression.approximators.lstm_ds import LSTM_DS
 from emg_regression.utils.trainer import Trainer
 from emg_regression.utils.model_tools import get_input_output, evaluate_model, compute_loss
 
