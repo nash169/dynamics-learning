@@ -5,10 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from emg_regression.approximators.lstm import LSTM
 from emg_regression.utils.trainer import Trainer
-from emg_regression.utils.training_tools import get_input_output, evaluate_model
+from emg_regression.utils.model_tools import get_input_output, evaluate_model
 
-use_cuda = torch.cuda.is_available()
-device = torch.device("cuda" if use_cuda else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Train data
 data_x = np.load('data/train_x.npy') # x: u_theta, u_phi
