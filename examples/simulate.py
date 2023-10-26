@@ -16,30 +16,30 @@ model = SphericalPendulum(length=0.5)
 integrator = Integrator(step=0.01)
 
 # simulate
-freq = 0.1
+freq = 0.5
 T = 10
 
 # 2D case
 t = np.array([0.0])
 x = np.array([[0.0, 0.0, 0.0, 0.0]]) # state vec
 f0 = lambda x: np.array([0.0,0.0])
-f1 = lambda x : np.array([0.3 * np.sin(2 * np.pi * freq * x), 0.0])
-f2 = lambda x : np.array([0.0, 0.2 * np.sin(2 * np.pi * freq * x)])
+f1 = lambda x : np.array([0.5 * np.sin(2 * np.pi * freq * x), 0.0])
+f2 = lambda x : np.array([0.3 * np.sin(2 * np.pi * freq * x), 0.2 * np.sin(2 * np.pi *freq * x)])
 f3 = lambda x : np.array([-0.4 * np.sin(2 * np.pi * freq * x), 0.0])
 
 u = np.array([f1(t[-1])])
 a = np.array([integrator(model, x[-1,:], u[-1])[1]])
 
 while (t[-1] < T+1):
-    f = f0 if t[-1] <=1 else (f1 if t[-1] < T/4 else f2)
+    f = f0 if t[-1] <=1 else (f1 if t[-1] < T/2 else f2)
     u = np.append(u, f(t[-1])[np.newaxis,:],axis=0)
     x_, a_ = integrator(model, x[-1,:], u[-1])
     x = np.append(x, x_[np.newaxis,:], axis=0)
     a = np.append(a, a_[np.newaxis,:], axis=0)
     t = np.append(t, t[-1] + integrator.step)
 
-# np.save('data/train_x', u)
-# np.save('data/train_y', x)
+np.save('data/train_x', u)
+np.save('data/train_y', x)
 
 # np.save('data/test_x', u)
 # np.save('data/test_y', x)

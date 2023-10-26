@@ -130,6 +130,8 @@ class Trainer:
         # Close file
         if self.options_["record_loss"]:
             return self.losses
+        
+        return self.losses
 
     # Model
     @property
