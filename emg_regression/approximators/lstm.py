@@ -59,6 +59,9 @@ class LSTM(nn.Module):
 
         X0 = torch.from_numpy(x) if isinstance(x,np.ndarray) else x
         Y0 = torch.from_numpy(y.copy()) if y is not None and isinstance(y, np.ndarray) else y
+        X0 = X0.to(device)
+        Y0 = Y0.to(device)
+
         t  = np.array([])
 
         for k in range(0, X0.size(0)-window_size+1, offset):
@@ -226,10 +229,3 @@ def process_input2(x,window_size,offset,time):
         t = np.append(t,time[k+window_size-1])
         X = torch.cat((X, x))
     return X[1:].float(), t
-
-def predict(model, y, window_size, offset, time):
-    input, tproc = process_input2(y, window_size, offset, time)
-    output = model(input)
-    output = output.detach().numpy()
-    input = input[:,-1,:].detach().numpy()
-    return input, output, tproc

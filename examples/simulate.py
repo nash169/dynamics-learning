@@ -16,54 +16,56 @@ model = SphericalPendulum(length=0.5)
 integrator = Integrator(step=0.01)
 
 # simulate
-freq = 0.5
-T = 10
+freq = 0.6
+T = 5
 
 # 2D case
 t = np.array([0.0])
 x = np.array([[0.0, 0.0, 0.0, 0.0]]) # state vec
 f0 = lambda x: np.array([0.0,0.0])
 f1 = lambda x : np.array([0.5 * np.sin(2 * np.pi * freq * x), 0.0])
-f2 = lambda x : np.array([0.3 * np.sin(2 * np.pi * freq * x), 0.2 * np.sin(2 * np.pi *freq * x)])
+f2 = lambda x : np.array([0.3 * np.sin(2 * np.pi * freq * x), -0.2 * np.sin(2 * np.pi *freq * x)])
 f3 = lambda x : np.array([-0.4 * np.sin(2 * np.pi * freq * x), 0.0])
 
 u = np.array([f1(t[-1])])
 a = np.array([integrator(model, x[-1,:], u[-1])[1]])
 
 while (t[-1] < T+1):
-    f = f0 if t[-1] <=1 else (f1 if t[-1] < T/2 else f2)
+    f = f0 if t[-1] <=1 else (f3 if t[-1] < T/3 else f2)
     u = np.append(u, f(t[-1])[np.newaxis,:],axis=0)
     x_, a_ = integrator(model, x[-1,:], u[-1])
     x = np.append(x, x_[np.newaxis,:], axis=0)
     a = np.append(a, a_[np.newaxis,:], axis=0)
     t = np.append(t, t[-1] + integrator.step)
 
-np.save('data/train_x', u)
-np.save('data/train_y', x)
+# np.save('data/train_x', u)
+# np.save('data/train_y', x)
 
 # np.save('data/test_x', u)
 # np.save('data/test_y', x)
 
-fig = plt.figure(figsize=(5,8))
-ax = fig.add_subplot(511)
-ax.plot(t, u) # input
-ax.set_ylabel("Input")
-ax = fig.add_subplot(512)
-ax.plot(t, a) 
-ax.set_ylabel("Acceleration")
-ax = fig.add_subplot(513)
-ax.plot(t, x[:,2:]*180/np.pi) 
-ax.set_ylabel("Velocity")
-ax = fig.add_subplot(514)
-ax.plot(t, x[:,:2]*180/np.pi)
-ax.set_ylabel("Theta (deg)")
+vis = 0
+if vis:
+    fig = plt.figure(figsize=(5,8))
+    ax = fig.add_subplot(511)
+    ax.plot(t, u) # input
+    ax.set_ylabel("Input")
+    ax = fig.add_subplot(512)
+    ax.plot(t, a) 
+    ax.set_ylabel("Acceleration")
+    ax = fig.add_subplot(513)
+    ax.plot(t, x[:,2:]*180/np.pi) 
+    ax.set_ylabel("Velocity")
+    ax = fig.add_subplot(514)
+    ax.plot(t, x[:,:2]*180/np.pi)
+    ax.set_ylabel("Theta (deg)")
 
-ax = fig.add_subplot(515)
-ax.plot(x[:,0]*180/np.pi,x[:,1]*180/np.pi)
-ax.set_xlabel(r'$\theta$')
-ax.set_ylabel(r'$\phi$')
-plt.tight_layout()
-plt.show()
+    ax = fig.add_subplot(515)
+    ax.plot(x[:,0]*180/np.pi,x[:,1]*180/np.pi)
+    ax.set_xlabel(r'$\theta$')
+    ax.set_ylabel(r'$\phi$')
+    plt.tight_layout()
+    plt.show()
 
 
 # Projection on visual interface

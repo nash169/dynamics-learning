@@ -30,9 +30,10 @@ class Data_processing():
         self.angvel       = np.array(data['angvel'])       [::self.ds_factor]
         self.torso_angles = np.array(data['torso_angles']) [::self.ds_factor]
         self.desCmd       = np.array(data['desCmd'])       [::self.ds_factor]
-        self.cursorPos    = np.array(data['cursorPos'])    [::self.ds_factor]
-        self.targetPos    = np.array(data['targetPos'])    [::self.ds_factor]
-        self.homePos      = np.array(data['homePos'])      [::self.ds_factor]
+        self.trialID      = np.array(data['trialID'])      [::self.ds_factor]
+        # self.cursorPos    = np.array(data['cursorPos'])    [::self.ds_factor]
+        # self.targetPos    = np.array(data['targetPos'])    [::self.ds_factor]
+        # self.homePos      = np.array(data['homePos'])      [::self.ds_factor]
         self.control_mode = data['control_modality']  
 
         self.t = self.t - self.t[0]
@@ -64,7 +65,70 @@ class Data_processing():
         Bf, Af = signal.butter(2, self.fc/(self.fs/2), 'low') 
         self.torso_vel = signal.filtfilt(Bf,Af,torso_angle_vel,axis=0)*180/np.pi #deg        
 
-    def pre_process(self,vis,filt=1):
+    def get_emgfeatures_online(self,fc=[50,400]):
+        emgdata = self.emgdata
+        fs = 2000
+        twindow = int(0.1 * fs)
+        buffer  = int(0.03 * fs)
+        nfc1, nfc2 = fc[0]/(fs/2), fc[1]/(fs/2)
+        A, B = signal.butter(7, [nfc1, nfc2], 'band') 
+        rms = lambda x: np.sqrt(np.mean(x**2,0))
+        features = np.array([]).reshape((0,emgdata.shape[1]))
+        for i in range(0,len(emgdata),twindow):
+            try:
+                emg_tw = emgdata[i:i+twindow,:]
+            except:
+                emg_tw = emgdata[i:,:]
+            data_to_filt = emg_tw if i==0 else np.vstack((buffer_tw,emg_tw))
+            emg_tw_filt = signal.lfilter(A,B,data_to_filt,axis=0)
+            emg_tw_filt = emg_tw_filt if i==0 else emg_tw_filt[buffer:]
+            features = np.vstack((features,rms(emg_tw_filt)))
+            buffer_tw = emg_tw[-buffer:]
+        self.emg_rms = features
+
+    def get_emgfeatures(self,emgdata,y,t):
+        twindow = int(0.1 * self.fs)
+        self.twindow = twindow
+        rms = lambda x: np.sqrt(np.mean(x**2,0))
+        features = np.array([]).reshape((0,emgdata.shape[1]))
+        target = np.array([]).reshape((0,y.shape[1]))
+        time = np.array([])
+        for i in range(0,len(emgdata),twindow):
+            try:
+                emg_tw = emgdata[i:i+twindow,:]
+                angles_tw = y[i:i+twindow,:]
+                t_tw = t[i]
+            except:
+                emg_tw = emgdata[i:,:]
+                angles_tw = y[i:,:]
+            features = np.vstack((features,rms(emg_tw)))
+            target = np.vstack((target,angles_tw.mean(0)))
+            time = np.append(time,t_tw)
+        return features,target,time
+
+    def process_emg(self,vis):
+        x  = self.emgdata
+        fs = self.fs
+        fc = [50,400]
+        A, B = signal.butter(8, [fc[0]/(fs/2), fc[1]/(fs/2)], 'band')
+        sigBP = signal.filtfilt(A,B,x,axis=0)
+        emg_rms,self.angles,self.t_f = self.get_emgfeatures(sigBP,self.torso_angles,self.t)
+
+        fs_f = 10 # 0.1s - 1 sample 
+        Af,Bf = signal.butter(4, 1/(fs_f/2), 'low')
+        self.emg_rms = signal.lfilter(Af,Bf,emg_rms,axis=0)
+        self.fs_features = fs_f
+
+        if vis:
+            fig = plt.figure(figsize=(16,9))
+            ax = fig.add_subplot(211)
+            ax.plot(self.t_f,self.emg_rms)
+            ax = fig.add_subplot(212)
+            ax.plot(self.t_f,self.angles)
+            plt.show()
+
+
+    def pre_process_features(self,vis,filt=1):
         """ Filters features and normalizes them. Data visualization."""
         
         # Filter the features
@@ -103,5 +167,5 @@ class Data_processing():
             plt.show()
 
             plt.subplots(figsize=(4,2))
-            plt.plot(self.cursorPos[:,0],self.cursorPos[:,1])
+            plt.plot(self.torso_angles[:,0],self.torso_angles[:,1])
             plt.show()

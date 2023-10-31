@@ -18,24 +18,30 @@ def predict(model,X,Y):
 
 def evaluate_model(model,XTrain,YTrain,vis=None,t_train=None,XTest=None,YTest=None,t_test=None):
     YTrain_pred, mse_train = predict(model,XTrain,YTrain)
-    ytrain      = YTrain.detach().numpy()
-    ytrain_pred = YTrain_pred.detach().numpy()
+    # ytrain      = YTrain.detach().numpy()
+    # ytrain_pred = YTrain_pred.detach().numpy()
+    ytrain      = YTrain.detach().cpu().numpy()
+    ytrain_pred = YTrain_pred.detach().cpu().numpy()
     t_train = np.arange(0,len(ytrain)*0.01,0.01) if t_train is None else t_train
     m, mse_test = 1, []
+    output_dim = ytrain.shape[1]
     if XTest is not None:
         YTest_pred, mse_test = predict(model,XTest,YTest)
-        ytest      = YTest.detach().numpy()
-        ytest_pred = YTest_pred.detach().numpy()
+        # ytest      = YTest.detach().numpy()
+        # ytest_pred = YTest_pred.detach().numpy()
+        ytest      = YTest.detach().cpu().numpy()
+        ytest_pred = YTest_pred.detach().cpu().numpy()
         t_test = np.arange(0,len(ytest)*0.01,0.01) if t_test is None else t_test
         m = 2
     if vis:
-        fig, axes = plt.subplots(ytrain.shape[1],m,figsize=(10,5))
-        for j in range(ytrain.shape[1]):
-            ax = axes[j,0] if m >1 else axes[j]
+        fig, axes = plt.subplots(output_dim,m,figsize=(8,5))
+        for j in range(output_dim):
+            ax = axes[j, 0] if m > 1 else axes if output_dim == 1 else axes[j]
             ax.plot(t_train,ytrain[:,j],label='True')
             ax.plot(t_train,ytrain_pred[:,j], color='r',label='Predicted')
             ax.set_ylabel(r'$y_{}$'.format(j+1))
-            if j == ytrain.shape[1] -1: ax.set_xlabel('Time [s]')
+            ax.grid()
+            if j == output_dim -1: ax.set_xlabel('Time [s]')
             if j == 0:
                 ax.legend()
                 ax.set_title(f'Training data (MSE = {mse_train:.5f})')
@@ -44,15 +50,38 @@ def evaluate_model(model,XTrain,YTrain,vis=None,t_train=None,XTest=None,YTest=No
                 ax.plot(t_test,ytest[:,j],label='True')
                 ax.plot(t_test,ytest_pred[:,j], color='r', label='Predicted')
                 ax.set_ylabel(r'$y_{}$'.format(j+1))
+                ax.grid()
                 axes[-1,1].set_xlabel('Time [s]')
                 axes[0,1].set_title(f'Testing data (MSE = {mse_test:.5f})')
+
         plt.tight_layout()
         plt.show()
     return mse_train, mse_test
 
 
-def split_train_test(x,y,train_ration,t=None):
-    NTrain = int(len(x) * train_ration)
+
+def plot_regression(ytrue,ypred,tpred):
+    mse   = compute_loss(torch.from_numpy(ypred),torch.from_numpy(ytrue)).item()
+    fig, axes = plt.subplots(ytrue.shape[1],1,figsize=(8,5))
+    for j in range(ytrue.shape[1]):
+        ax = axes[j]
+        ax.plot(tpred,ytrue[:,j],label='True')
+        ax.plot(tpred,ypred[:,j], color='r',label='Predicted')
+        ax.set_ylabel(r'$y_{}$'.format(j+1))
+        # ax.set_xticks(np.arange(0,len(u)*dt,1))
+        ax.grid()
+        if j == ytrue.shape[1] -1: 
+            ax.set_xlabel('Time [s]')
+        if j == 0:
+            ax.legend()
+            ax.set_title(f'Training data (MSE = {mse:.5f})')
+    plt.tight_layout()
+    plt.show()
+    return mse
+
+
+def split_train_test(x,y,train_ratio,t=None):
+    NTrain = int(len(x) * train_ratio)
     train_x, train_y = x[:NTrain,:], y[:NTrain,:]
     test_x, test_y = x[NTrain:,:], y[NTrain:,:]
     if t is not None:

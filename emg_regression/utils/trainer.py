@@ -5,7 +5,7 @@ import os
 import numpy as np
 
 class Trainer:
-    __options__ = ['epochs', 'batch', 'normalize',
+    __options__ = ['epochs', 'batch', 'normalize_input', 'normalize_output',
                    'shuffle', 'record_loss', 'print_loss', 'clip_grad', 'load_model']
 
     def __init__(self, model, input, target):
@@ -53,9 +53,14 @@ class Trainer:
             self.options_['batch'] = self.input.size(0)
 
         # Normalize dataset
-        if self.options_['normalize']:
-            mu, std = self.input.mean(0), self.input.std(0)
-            self.input.sub_(mu).div_(std)
+        if self.options_['normalize_input']:
+            self.mu_in  = self.input.mean(0) if len(self.input.shape) == 2 else self.input.mean((0,1))
+            self.std_in = self.input.std(0)  if len(self.input.shape) == 2 else self.input.std((0,1))
+            self.input.sub_(self.mu_in).div_(self.std_in)
+
+        if self.options_['normalize_output']:
+            self.min_out, self.max_out = abs(self.target.min(0).values), abs(self.target.max(0).values)
+            self.target = torch.where(self.target>=0, self.target/self.max_out,self.target/self.max_out)
 
         # Activate grad
         self.input.requires_grad = True

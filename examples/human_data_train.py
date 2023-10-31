@@ -8,36 +8,56 @@ from emg_regression.approximators.lstm import LSTM
 from emg_regression.utils.trainer import Trainer
 from emg_regression.utils.model_tools import split_train_test, evaluate_model, save_model
 import matplotlib.pyplot as plt
+from scipy import signal
 
 # Load and process real dataset (EMG, IMU)
-data_path = 'data/data_10_56.pkl'
-data = pickle.load(open(data_path,'rb'))
-data = Data_processing(data,degrees=0,downsample_factor=20)
+# data_path = 'data/data_10_56.pkl'
+data_path = '/Users/carol/repos/bomi_ws/data/subjects/carol/_27_10_2023/imu/data_16_09.pkl'
+data_ = pickle.load(open(data_path,'rb'))
+data = Data_processing(data_,degrees=0,downsample_factor=1)
 data.load_data()
-data.pre_process(vis=0, filt=1)
+data.process_emg(vis=0)
 
-x = data.features_norm
-y = data.torso_angles
+rms_detrend = signal.detrend(data.emg_rms,axis=0)
+
+t = data.t_f
+x = rms_detrend
+y = data.angles
+
+x_mu, x_std = x.mean(0), x.std(0)
+xn = (x-x_mu)/x_std
+
+ymin, ymax = abs(y.min(0)), abs(y.max(0))
+yn = np.where(y>=0,y/ymax,y/ymin)
+
+# fig = plt.figure()
+# ax = fig.add_subplot(211)
+# # ax.plot(data.t_f,data.angles)
+# ax.plot(t,xn)
+# ax = fig.add_subplot(212)
+# ax.plot(t,y)
+# plt.show()
+
 # x = data.torso_angles
 # y = data.features_norm
 print('x.shape:',x.shape,', y.shape:',y.shape)
 
 # Train LSTM
 dim_input, dim_output = np.shape(x)[1], np.shape(y)[1]
-dim_hidden = 20
-nb_layers = 2
+dim_hidden = 50
+nb_layers = 3
 dim_pre_output = 20
 bidirectional = False
 
-time_window = 1 # sec
-window_size = int(time_window*data.fs)
-offset = int(window_size*0.1)
+time_window = 3 # sec
+window_size = int(time_window*data.fs_features)
+offset = 1
 print('window_size=',window_size,'| offset=',offset)
 
-nb_epochs = 300
-mini_batch_size = 50 # or 30
+nb_epochs = 500
+mini_batch_size = 20 # or 30
 learning_rate = 1e-3
-weight_decay  = 1e-6
+weight_decay  = 1e-5
 training_ratio = 0.75
 
 
@@ -45,7 +65,7 @@ training_ratio = 0.75
 approximator = LSTM(dim_input, dim_hidden, nb_layers,
                     dim_pre_output, dim_output, bidirectional)
 
-train_x, test_x, train_y, test_y = split_train_test(x,y,train_ration=0.75,t=None)
+train_x, test_x, train_y, test_y = split_train_test(xn,yn,train_ratio=0.75,t=None)
 
 XTrain, YTrain, t_train = approximator.process_input(train_x, window_size, offset,
                                                      y=train_y, time=None)
@@ -56,7 +76,8 @@ XTest, YTest, t_test = approximator.process_input(test_x, window_size, offset,
 
 # Train
 trainer = Trainer(model=approximator, input=XTrain, target=YTrain)
-trainer.options(normalize=True,
+trainer.options(normalize_input=False,
+                normalize_output=False,
                 epochs=nb_epochs,
                 batch=mini_batch_size,
                 shuffle=False,
