@@ -12,6 +12,7 @@ class Data_processing():
         self.fs = 2000/self.ds_factor
         self.fc = 1
         self.degrees = degrees
+        self.twindow_s = 0.1
 
         self.muscles = ['ES right','ES left', 'OEA right','OEA left']
         self.colors  = ["blue","orange","g","r"]
@@ -23,26 +24,26 @@ class Data_processing():
 
         self.t            = np.array(data['time'])         [::self.ds_factor]
         self.emgdata      = np.array(data['emgdata'])      [::self.ds_factor,self.emg_chs]
-        self.emgfeatures  = np.array(data['emgfeatures'])  [::self.ds_factor,[0,2,4,6]] # get RMS only
+        self.emgfeatures  = np.array(data['emgfeatures'])  [::self.ds_factor] # get RMS only
         self.eul          = np.array(data['eul'])          [::self.ds_factor] 
         self.quat         = np.array(data['quat'])         [::self.ds_factor]
         self.linacc       = np.array(data['linacc'])       [::self.ds_factor]
         self.angvel       = np.array(data['angvel'])       [::self.ds_factor]
         self.torso_angles = np.array(data['torso_angles']) [::self.ds_factor]
         self.desCmd       = np.array(data['desCmd'])       [::self.ds_factor]
-        self.trialID      = np.array(data['trialID'])      [::self.ds_factor]
+        # self.trialID      = np.array(data['trialID'])      [::self.ds_factor]
         # self.cursorPos    = np.array(data['cursorPos'])    [::self.ds_factor]
         # self.targetPos    = np.array(data['targetPos'])    [::self.ds_factor]
         # self.homePos      = np.array(data['homePos'])      [::self.ds_factor]
         self.control_mode = data['control_modality']  
 
         self.t = self.t - self.t[0]
-        self.get_torso_ang(eul0=self.eul[0,:])
-        self.get_torso_angvel()
+        # self.get_torso_ang(eul0=self.eul[0,:])
+        # self.get_torso_angvel()
 
-        if not self.degrees: 
-            self.torso_angles = self.torso_angles * np.pi/180
-            self.torso_vel = self.torso_vel * np.pi/180
+        # if not self.degrees: 
+        #     self.torso_angles = self.torso_angles * np.pi/180
+        #     self.torso_vel = self.torso_vel * np.pi/180
 
     def get_torso_ang(self,eul0):
         """ Returns torso right flex angle and frontal flex angles"""
@@ -87,10 +88,12 @@ class Data_processing():
         self.emg_rms = features
 
     def get_emgfeatures(self,emgdata,y,t):
-        twindow = int(0.1 * self.fs)
+        twindow = int(self.twindow_s * self.fs)
         self.twindow = twindow
         rms = lambda x: np.sqrt(np.mean(x**2,0))
-        features = np.array([]).reshape((0,emgdata.shape[1]))
+        nzc = lambda x: ((x[:-1] * x[1:]) < 0).sum(0)
+
+        features = np.array([]).reshape((0,emgdata.shape[1]*2))
         target = np.array([]).reshape((0,y.shape[1]))
         time = np.array([])
         for i in range(0,len(emgdata),twindow):
@@ -101,10 +104,23 @@ class Data_processing():
             except:
                 emg_tw = emgdata[i:,:]
                 angles_tw = y[i:,:]
-            features = np.vstack((features,rms(emg_tw)))
+            features_tw = np.append(rms(emg_tw),nzc(emg_tw))
+            features = np.vstack((features,features_tw))
             target = np.vstack((target,angles_tw.mean(0)))
             time = np.append(time,t_tw)
+        
+        self.features, self.target, self.time = features, target, time
+        self.fs_features = 1/self.twindow_s
         return features,target,time
+
+    def filter_features(self):
+        fc = 1
+        bf,af = signal.butter(4, fc/(self.fs_features/2), 'low') 
+        self.features_filt = signal.filtfilt(bf,af, self.features,axis=0)
+
+        # bf,af = signal.butter(4, fc/(data.fs_features/2), 'low') 
+        # features_filt = signal.filtfilt(bf,af, features,axis=0)
+        return self.filter_features
 
     def process_emg(self,vis):
         x  = self.emgdata

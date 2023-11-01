@@ -12,17 +12,29 @@ from scipy import signal
 
 # Load and process real dataset (EMG, IMU)
 # data_path = 'data/data_10_56.pkl'
-data_path = '/Users/carol/repos/bomi_ws/data/subjects/carol/_27_10_2023/imu/data_16_09.pkl'
+data_path = '/Users/carol/repos/bomi_ws/data/subjects/carol/_01_11_2023/imu/data_19_27.pkl'
 data_ = pickle.load(open(data_path,'rb'))
 data = Data_processing(data_,degrees=0,downsample_factor=1)
 data.load_data()
-data.process_emg(vis=0)
+# data.process_emg(vis=0)
 
-rms_detrend = signal.detrend(data.emg_rms,axis=0)
+features,target,time =data.get_emgfeatures(data.emgdata,data.desCmd,data.t)
+features_filt = data.filter_features()
 
-t = data.t_f
-x = rms_detrend
-y = data.angles
+# t = time
+# x = features_filt[:,:4]
+# y = target
+
+# With shift
+# shift = 5
+# t = time[:-shift]
+# x = features_filt[:-shift,:4]
+# y = target[shift:,:]
+
+# Autoregressive option
+t = time[1:]
+x = np.hstack((features_filt[:-1,:4], target[:-1,:]))
+y = target[1:,:]
 
 x_mu, x_std = x.mean(0), x.std(0)
 xn = (x-x_mu)/x_std
@@ -31,11 +43,11 @@ ymin, ymax = abs(y.min(0)), abs(y.max(0))
 yn = np.where(y>=0,y/ymax,y/ymin)
 
 # fig = plt.figure()
-# ax = fig.add_subplot(211)
+# ax = fig.add_subplot(111)
 # # ax.plot(data.t_f,data.angles)
 # ax.plot(t,xn)
-# ax = fig.add_subplot(212)
-# ax.plot(t,y)
+# # ax = fig.add_subplot(212)
+# ax.plot(t,yn)
 # plt.show()
 
 # x = data.torso_angles
@@ -44,12 +56,12 @@ print('x.shape:',x.shape,', y.shape:',y.shape)
 
 # Train LSTM
 dim_input, dim_output = np.shape(x)[1], np.shape(y)[1]
-dim_hidden = 50
-nb_layers = 3
-dim_pre_output = 20
+dim_hidden = 80
+nb_layers = 2
+dim_pre_output = 40
 bidirectional = False
 
-time_window = 3 # sec
+time_window = 1 # sec
 window_size = int(time_window*data.fs_features)
 offset = 1
 print('window_size=',window_size,'| offset=',offset)
@@ -65,13 +77,13 @@ training_ratio = 0.75
 approximator = LSTM(dim_input, dim_hidden, nb_layers,
                     dim_pre_output, dim_output, bidirectional)
 
-train_x, test_x, train_y, test_y = split_train_test(xn,yn,train_ratio=0.75,t=None)
+train_x, test_x, train_y, test_y, t_train, t_test = split_train_test(xn,yn,train_ratio=0.75,t=t)
 
 XTrain, YTrain, t_train = approximator.process_input(train_x, window_size, offset,
-                                                     y=train_y, time=None)
+                                                     y=train_y, time=t_train)
 # print(XTrain.shape, YTrain.shape, t_train.shape)
 XTest, YTest, t_test = approximator.process_input(test_x, window_size, offset,
-                                                     y=test_y, time=None)
+                                                     y=test_y, time=t_test)
 
 
 # Train
@@ -95,6 +107,7 @@ plt.show()
 mse_train, mse_test = evaluate_model(trained_model,
                                      XTrain=XTrain,YTrain=YTrain,
                                      XTest=XTest,YTest=YTest,
+                                     t_train=t_train, t_test=t_test,
                                      vis=1)
 
 # Save model and parameters
