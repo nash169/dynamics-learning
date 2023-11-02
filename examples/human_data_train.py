@@ -55,6 +55,7 @@ yn = np.where(y>=0,y/ymax,y/ymin)
 print('x.shape:',x.shape,', y.shape:',y.shape)
 
 # Train LSTM
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 dim_input, dim_output = np.shape(x)[1], np.shape(y)[1]
 dim_hidden = 80
 nb_layers = 2
@@ -66,16 +67,10 @@ window_size = int(time_window*data.fs_features)
 offset = 1
 print('window_size=',window_size,'| offset=',offset)
 
-nb_epochs = 500
-mini_batch_size = 20 # or 30
-learning_rate = 1e-3
-weight_decay  = 1e-5
-training_ratio = 0.75
-
 
 #LSTM
 approximator = LSTM(dim_input, dim_hidden, nb_layers,
-                    dim_pre_output, dim_output, bidirectional)
+                    dim_pre_output, dim_output, bidirectional).to(device)
 
 train_x, test_x, train_y, test_y, t_train, t_test = split_train_test(xn,yn,train_ratio=0.75,t=t)
 
@@ -87,6 +82,13 @@ XTest, YTest, t_test = approximator.process_input(test_x, window_size, offset,
 
 
 # Train
+nb_epochs = 500
+mini_batch_size = 20 # or 30
+learning_rate = 1e-3
+weight_decay  = 1e-5
+training_ratio = 0.75
+
+
 trainer = Trainer(model=approximator, input=XTrain, target=YTrain)
 trainer.options(normalize_input=False,
                 normalize_output=False,
