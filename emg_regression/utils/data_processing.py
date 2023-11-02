@@ -31,11 +31,14 @@ class Data_processing():
         self.angvel       = np.array(data['angvel'])       [::self.ds_factor]
         self.torso_angles = np.array(data['torso_angles']) [::self.ds_factor]
         self.desCmd       = np.array(data['desCmd'])       [::self.ds_factor]
-        # self.trialID      = np.array(data['trialID'])      [::self.ds_factor]
-        # self.cursorPos    = np.array(data['cursorPos'])    [::self.ds_factor]
-        # self.targetPos    = np.array(data['targetPos'])    [::self.ds_factor]
-        # self.homePos      = np.array(data['homePos'])      [::self.ds_factor]
         self.control_mode = data['control_modality']  
+        try:
+            self.trialID      = np.array(data['trialID'])      [::self.ds_factor]
+            self.cursorPos    = np.array(data['cursorPos'])    [::self.ds_factor]
+            self.targetPos    = np.array(data['targetPos'])    [::self.ds_factor]
+            self.homePos      = np.array(data['homePos'])      [::self.ds_factor]
+        except:
+            pass
 
         self.t = self.t - self.t[0]
         # self.get_torso_ang(eul0=self.eul[0,:])
@@ -108,7 +111,7 @@ class Data_processing():
             features = np.vstack((features,features_tw))
             target = np.vstack((target,angles_tw.mean(0)))
             time = np.append(time,t_tw)
-        
+
         self.features, self.target, self.time = features, target, time
         self.fs_features = 1/self.twindow_s
         return features,target,time
@@ -120,7 +123,7 @@ class Data_processing():
 
         # bf,af = signal.butter(4, fc/(data.fs_features/2), 'low') 
         # features_filt = signal.filtfilt(bf,af, features,axis=0)
-        return self.filter_features
+        return self.features_filt
 
     def process_emg(self,vis):
         x  = self.emgdata

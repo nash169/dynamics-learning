@@ -121,10 +121,10 @@ class Trainer:
 
                     # step scheduler
                     scheduler.step(loss)
-                    
+
                 if self.options_["record_loss"]:
                     self.losses = np.append(self.losses, np.mean(epoch_loss))
-                
+
                 # Print loss
                 if self.options_["print_loss"]:
                     print("EPOCH: ", epoch, " |  LOSS: ", self.losses[-1])
@@ -135,7 +135,7 @@ class Trainer:
         # Close file
         if self.options_["record_loss"]:
             return self.losses
-        
+
         return self.losses
 
     # Model

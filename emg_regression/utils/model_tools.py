@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import pickle, datetime
 from emg_regression.approximators.lstm import LSTM
+from sklearn.metrics import mean_squared_error
 
 def compute_loss(predicted, target_data):
     with torch.no_grad():
@@ -59,36 +60,51 @@ def evaluate_model(model,XTrain,YTrain,vis=None,t_train=None,XTest=None,YTest=No
     return mse_train, mse_test
 
 
+def plot_regression(ytrain, ytrain_pred, t_train,  ytest=None, ytest_pred=None,t_test=None):
+    output_dim = ytrain.shape[1]
+    mse_train = mean_squared_error(ytrain_pred,ytrain)
+    m, mse_test = 1, []
+    if ytest is not None:
+      mse_test = mean_squared_error(ytest_pred,ytest)
+      m = 2
 
-def plot_regression(ytrue,ypred,tpred):
-    mse   = compute_loss(torch.from_numpy(ypred),torch.from_numpy(ytrue)).item()
-    fig, axes = plt.subplots(ytrue.shape[1],1,figsize=(8,5))
-    for j in range(ytrue.shape[1]):
-        ax = axes[j]
-        ax.plot(tpred,ytrue[:,j],label='True')
-        ax.plot(tpred,ypred[:,j], color='r',label='Predicted')
+    fig, axes = plt.subplots(output_dim,m,figsize=(8,5))
+    for j in range(output_dim):
+        ax = axes[j, 0] if m > 1 else axes if output_dim == 1 else axes[j]
+        ax.plot(t_train,ytrain[:,j],label='True')
+        ax.plot(t_train,ytrain_pred[:,j], color='r',label='Predicted')
         ax.set_ylabel(r'$y_{}$'.format(j+1))
-        # ax.set_xticks(np.arange(0,len(u)*dt,1))
         ax.grid()
-        if j == ytrue.shape[1] -1: 
-            ax.set_xlabel('Time [s]')
+        if j == output_dim -1: ax.set_xlabel('Time [s]')
         if j == 0:
             ax.legend()
-            ax.set_title(f'Training data (MSE = {mse:.5f})')
+            ax.set_title(f'Training data (MSE = {mse_train:.5f})')
+        if ytest is not None:
+            ax = axes[j,1]
+            ax.plot(t_test,ytest[:,j],label='True')
+            ax.plot(t_test,ytest_pred[:,j], color='r', label='Predicted')
+            ax.set_ylabel(r'$y_{}$'.format(j+1))
+            ax.grid()
+            axes[-1,1].set_xlabel('Time [s]')
+            axes[0,1].set_title(f'Testing data (MSE = {mse_test:.5f})')
     plt.tight_layout()
     plt.show()
-    return mse
+
+    return mse_train, mse_test
 
 
 def split_train_test(x,y,train_ratio,t=None):
+    
     NTrain = int(len(x) * train_ratio)
-    train_x, train_y = x[:NTrain,:], y[:NTrain,:]
-    test_x, test_y = x[NTrain:,:], y[NTrain:,:]
-    if t is not None:
-        t_train, t_test  = t[:NTrain], t[NTrain:]
-        return train_x, test_x, train_y, test_y, t_train, t_test
-    else:
-        return train_x, test_x, train_y, test_y
+    train_x = x[:NTrain,:]
+    train_y = y[:NTrain,:]
+    t_train = t[:NTrain] if t is not None else []
+
+    test_x = x[NTrain:,:] if train_ratio != 1 else []
+    test_y = y[NTrain:,:] if train_ratio != 1 else []
+    t_test  = t[NTrain:] if t is not None else []
+    
+    return train_x, test_x, train_y, test_y, t_train, t_test
 
 
 def save_model(path, model, params):
@@ -137,3 +153,8 @@ def get_input_output(train_x,train_y,option):
         output = train_y[1:,:2] # theta(k+1), phi(k+1)
         print("Input: theta(k), phi(k), theta_dot(k), phi_dot(k), u1(k), u2(k) -> Output: theta(k+1), phi(k+1)")
     return input, output
+
+
+def running_mean(x, N):
+    cumsum = np.cumsum(np.insert(x, 0, 0,axis=0),axis=0)
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
