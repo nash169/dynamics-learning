@@ -102,7 +102,7 @@ def split_train_test(x,y,train_ratio,t=None):
 
     test_x = x[NTrain:,:] if train_ratio != 1 else []
     test_y = y[NTrain:,:] if train_ratio != 1 else []
-    t_test  = t[NTrain:] if t is not None else []
+    t_test = t[NTrain:] if train_ratio != 1 else []
     
     return train_x, test_x, train_y, test_y, t_train, t_test
 
@@ -158,3 +158,124 @@ def get_input_output(train_x,train_y,option):
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0,axis=0),axis=0)
     return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+
+# Trajectory processing
+def prepare_dataset(u_traj,x_traj,inputs,outputs):
+    if outputs == 'pos':
+        out_idxs = [0,1]
+    if outputs == 'vel':
+        out_idxs = [2,3]
+    if outputs == 'pos_vel':
+        out_idxs = [0,1,2,3]
+
+    if inputs == 'pos':
+        in_idxs = [0,1]
+    if inputs == 'vel':
+        in_idxs = [2,3]
+    if inputs == 'pos_vel':
+        in_idxs = [0,1,2,3]
+
+    xin  = np.concatenate((u_traj[:,:-1,:], x_traj[:,:-1,in_idxs]), axis=2)
+    yout = x_traj[:,1:,out_idxs]
+    return xin, yout
+
+def get_normalization(u_traj,xin,yout):
+    u_mu, u_std = u_traj.mean(0).mean(0), u_traj.std(0).std(0)
+    xin_mu, xin_std = xin.mean(0).mean(0), xin.std(0).std(0)
+    yout_mu, yout_std = yout.mean(0).mean(0), yout.std(0).std(0)
+    return u_mu, u_std, xin_mu, xin_std, yout_mu, yout_std
+
+def split_train_test_traj(xin,yout,nb_traj,training_ratio):
+    nb_train = int(nb_traj*training_ratio)
+    nb_test  = nb_traj-nb_train
+    traj_idxs = np.arange(nb_traj)
+    random.shuffle(traj_idxs)
+    # nb_train = 35
+    # nb_test = 15
+
+    xin_train  = xin[traj_idxs[:nb_train],:,:]
+    yout_train = yout[traj_idxs[:nb_train],:,:]
+    xin_test   = xin[traj_idxs[nb_train:],:,:]
+    yout_test  = yout[traj_idxs[nb_train:],:,:]
+
+    return xin_train, yout_train, xin_test, yout_test
+
+
+def plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples):
+
+    dim_input, dim_output = x_test.shape[2], y_test.shape[2]
+    X_init = torch.zeros(init_samples,window_size,dim_input)
+    Y_init = torch.zeros(init_samples,dim_output)
+    all_mse = []
+
+    for i, ax in enumerate(axes.flat):
+        input_  = x_test[i,:,:] # theta, phi, theta_dot, phi_dot
+        target_ = y_test[i,:,:] # u = uc + ug
+
+        XTest, YTest, T_test = model.process_input(input_, window_size, offset=1,
+                                                    y=target_, time=None)
+
+        XTest_ = torch.cat((X_init,XTest),dim=0)
+        YTest_ = torch.cat((Y_init,YTest),dim=0)
+        
+        YTest_pred, mse_test = predict(model,XTest_,YTest_)
+        ytest_true = YTest.detach().numpy()
+        ytest_pred = YTest_pred[init_samples:].detach().numpy()
+        offset = ytest_pred[0] - ytest_true[0]
+        ytest_pred = ytest_pred - offset
+        all_mse.append(mse_test)
+
+        ax.plot(ytest_true[:,0],ytest_true[:,1],alpha=1,color='k')
+        ax.plot(ytest_pred[:,0],ytest_pred[:,1],alpha=1,color='grey')
+        ax.scatter(ytest_true[0,0],ytest_true[0,1],  s=50,color='blue')
+        ax.scatter(ytest_true[-1,0],ytest_true[-1,1],s=50,color='maroon')
+        ax.scatter(ytest_pred[0,0],ytest_pred[0,1],  s=50,color='skyblue')
+        ax.scatter(ytest_pred[-1,0],ytest_pred[-1,1],s=50,color='indianred')
+        ax.set_title(f'MSE={mse_test:.5f}')
+
+        ave_mse = np.array(all_mse).mean(0)
+        plt.suptitle(f'Average Test MSE={ave_mse:.5f}', fontweight='bold')
+        plt.tight_layout()
+        plt.show()
+
+    ave_mse = np.array(all_mse).mean(0)
+    plt.suptitle(f'Average Test MSE={ave_mse:.5f}', fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+    return ave_mse
+
+# Forward predictions
+def forward_prediction(model,train_x,train_y,t_train,window_size):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    u_dim = 2
+
+    # Unseen predictions on Training set
+    ytrain = train_y[window_size:,:]
+    x_tw = train_x[:window_size,:u_dim]
+    y_tw = train_x[:window_size,u_dim:]
+    ypred_k = train_x[window_size,u_dim:]
+    ypred = y_tw
+
+    for i in range(window_size,len(train_y)):
+        # Get new emg window
+        x_i = train_x[i,:u_dim]
+        x_tw = np.vstack((x_tw,x_i))[-window_size:,:]
+        X_tw = torch.from_numpy(x_tw).unsqueeze(0).float().to(device)
+
+        # Get last predictions
+        y_i = ypred_k
+        y_tw = np.vstack((y_tw,y_i))[-window_size:,:]
+        Y_tw = torch.from_numpy(y_tw).unsqueeze(0).float().to(device)
+
+        # Concatenate to create network input (1,window,6)
+        input_tw = torch.cat((X_tw,Y_tw),dim=2)
+
+        # Normalize input
+        # input_tw = input_tw.sub_(X_mu).div_(X_std)
+
+        # Make prediction
+        ypred_k = model(input_tw).cpu().detach().numpy()
+        ypred = np.vstack((ypred,ypred_k))
+
+    return ytrain, ypred[window_size:,:], t_train[window_size:]

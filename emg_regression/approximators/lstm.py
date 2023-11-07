@@ -33,8 +33,12 @@ class LSTM(nn.Module):
 
         self.fc_y2c = nn.Linear(in_features=dim_pre_output_layer, out_features=dim_output)
 
-    def forward(self, X):
+        self.drop = nn.Dropout(p=0.2)
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+    def forward(self, X):
         batch_size = X.size(0)
         # Initialize hidden state vector and cell state
         h0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(X.device)
@@ -43,6 +47,7 @@ class LSTM(nn.Module):
         # output, _ = self.lstm(X, (h0.detach(), c0.detach()))
         output, _ = self.lstm(X, (h0, c0))
         output = self.fc_o2y(output[:, -1, :])
+        # output = self.drop(output)
         output = F.relu(output)
         output = self.fc_y2c(output)
 
@@ -187,45 +192,3 @@ class LSTM(nn.Module):
     def compute_loss(self, predicted, target_data):
         with torch.no_grad():
             return F.mse_loss(predicted, target_data)
-
-    def save_model(self, path, model):
-        time_  = datetime.datetime.now().strftime("_%H_%M") 
-        model_name, params_name = '/lstm-1'+time_, '/params-1'+time_
-        model_path = path + model_name +'.pt'
-        params_path= path + params_name+'.sav'
-        pickle.dump(self.params, open(params_path, 'wb'))  
-        torch.save(model.state_dict(), model_path)
-        print('MODEL SAVED to: ' + model_path)
-
-
-def load_model(params_path,model_path):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Load params
-    params = pickle.load(open(params_path,'rb'))
-    dim_input      = params["dim_input"]
-    dim_output     = params["dim_output"]
-    dim_pre_output = params["dim_pre_output"]
-    nb_layers      = params["nb_layers"]
-    # bidirectional  = params["bidirectional"]
-    bidirectional  = False
-
-    # Load model
-    model = LSTM(dim_input, dim_pre_output, nb_layers,
-                dim_pre_output,dim_output,bidirectional).to(device)
-    
-    model.load_state_dict(torch.load(model_path))
-    model.eval()
-
-    return model, params
-
-def process_input2(x,window_size,offset,time):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    X0 = torch.from_numpy(x) if isinstance(x,np.ndarray) else x
-    X = torch.empty(1, window_size, x.shape[1]).float().to(device)
-    t = np.array([])
-    for k in range(0, X0.size(0)-window_size+1, offset):
-        x = X0[k:k+window_size, :].unsqueeze(0)
-        t = np.append(t,time[k+window_size-1])
-        X = torch.cat((X, x))
-    return X[1:].float(), t
