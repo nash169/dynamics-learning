@@ -14,9 +14,8 @@ print(f'- Device: {device}')
 
 # Load and process real dataset (EMG, IMU)
 # data_path = '/Users/carol/repos/bomi_ws/data/subjects/carol/_01_11_2023/imu/data_02_27.pkl'
-data_path = './data/trunk_data/data_10_56.pkl'
+data_path = './data/trunk_data/data_16_09.pkl'
 data_ = pickle.load(open(data_path,'rb'))
-data_['trialID']
 data = Data_processing(data_,degrees=0,downsample_factor=1)
 data.load_data()
 fs = data.fs

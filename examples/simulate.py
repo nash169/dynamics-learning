@@ -111,10 +111,10 @@ plt.show()
 # Save trajectories
 train_data = {'x':x_traj, 'u':u_traj, 'uc':uc_traj, 'ug':ug_traj, 't':t}
 
-# data_path = './data/traj_center_100_5s.pkl'
-# f = open(data_path, "wb")
-# pickle.dump(train_data, f)
-# f.close()
+data_path = './data/traj_center_100_3s.pkl'
+f = open(data_path, "wb")
+pickle.dump(train_data, f)
+f.close()
 
 # Show
 
