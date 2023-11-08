@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import pickle, datetime
 from emg_regression.approximators.lstm import LSTM
 from sklearn.metrics import mean_squared_error
+import random
 
 def compute_loss(predicted, target_data):
     with torch.no_grad():
@@ -17,21 +18,30 @@ def predict(model,X,Y):
     mse = compute_loss(YPred,Y).item()
     return YPred, mse
 
-def evaluate_model(model,XTrain,YTrain,vis=None,t_train=None,XTest=None,YTest=None,t_test=None):
+def evaluate_model(model,XTrain,YTrain,vis=None,t_train=None,XTest=None,YTest=None,t_test=None,bias=None):
+    # added inital offset and bias correction
+    
     YTrain_pred, mse_train = predict(model,XTrain,YTrain)
     # ytrain      = YTrain.detach().numpy()
     # ytrain_pred = YTrain_pred.detach().numpy()
     ytrain      = YTrain.detach().cpu().numpy()
-    ytrain_pred = YTrain_pred.detach().cpu().numpy()
+    ytrain_pred = YTrain_pred.detach().cpu().numpy() - bias
+    offset = ytrain_pred[0,:] - ytrain[0,:]
+    ytrain_pred = ytrain_pred - offset
+
     t_train = np.arange(0,len(ytrain)*0.01,0.01) if t_train is None else t_train
     m, mse_test = 1, []
     output_dim = ytrain.shape[1]
+    bias = 0 if bias is None else bias
     if XTest is not None:
         YTest_pred, mse_test = predict(model,XTest,YTest)
         # ytest      = YTest.detach().numpy()
         # ytest_pred = YTest_pred.detach().numpy()
         ytest      = YTest.detach().cpu().numpy()
-        ytest_pred = YTest_pred.detach().cpu().numpy()
+        ytest_pred = YTest_pred.detach().cpu().numpy() - bias
+        offset = ytest_pred[0,:]  - ytest[0,:] 
+        ytest_pred = ytest_pred - offset
+
         t_test = np.arange(0,len(ytest)*0.01,0.01) if t_test is None else t_test
         m = 2
     if vis:
@@ -186,11 +196,12 @@ def get_normalization(u_traj,xin,yout):
     yout_mu, yout_std = yout.mean(0).mean(0), yout.std(0).std(0)
     return u_mu, u_std, xin_mu, xin_std, yout_mu, yout_std
 
-def split_train_test_traj(xin,yout,nb_traj,training_ratio):
+def split_train_test_traj(xin,yout,nb_traj,training_ratio,shuffle=True):
     nb_train = int(nb_traj*training_ratio)
     nb_test  = nb_traj-nb_train
     traj_idxs = np.arange(nb_traj)
-    random.shuffle(traj_idxs)
+    if shuffle:
+        random.Random(4).shuffle(traj_idxs)
     # nb_train = 35
     # nb_test = 15
 
@@ -201,12 +212,44 @@ def split_train_test_traj(xin,yout,nb_traj,training_ratio):
 
     return xin_train, yout_train, xin_test, yout_test
 
+# Batch forward prediction
+
+# Forward predictions
+def batch_prediction(model,train_x,train_y,t_train,window_size,bias):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    u_dim = 2
+
+    i = 2
+    input_  = x_test[i,:,:] # theta, phi, theta_dot, phi_dot
+    target_ = y_test[i,:,:] # u = uc + ug
+
+    XTest, YTest, T_test = model.process_input(input_, window_size, offset=1,
+                                                y=target_, time=t_)
+
+    batch_size = 5
+    ypred = np.array([]).reshape(0,2)
+    all_mse = []
+    for j in range(0,len(XTest),batch_size):
+        X_batch = XTest[j:j+batch_size]
+        Y_batch = YTest[j:j+batch_size]
+        Ypred_batch, mse_batch = predict(model,X_batch,Y_batch)
+        ypred_batch = Ypred_batch.cpu().detach().numpy()
+        ypred = np.vstack((ypred,ypred_batch))
+        all_mse.append(mse_batch)
+
+    ytrue = YTest.cpu().detach().numpy()
+    t_test = T_test
+
 
 def plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     dim_input, dim_output = x_test.shape[2], y_test.shape[2]
-    X_init = torch.zeros(init_samples,window_size,dim_input)
-    Y_init = torch.zeros(init_samples,dim_output)
+    X_init = torch.zeros(init_samples,window_size,dim_input).to(device)
+    Y_init = torch.zeros(init_samples,dim_output).to(device)
+    Ypred_init, mse_offset = predict(model, X_init,Y_init)
+    ytrue, ypred = Y_init.cpu().detach().numpy(), Ypred_init.cpu().detach().numpy()
+    bias = (ypred - ytrue).mean(0)
     all_mse = []
 
     for i, ax in enumerate(axes.flat):
@@ -218,10 +261,10 @@ def plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples):
 
         XTest_ = torch.cat((X_init,XTest),dim=0)
         YTest_ = torch.cat((Y_init,YTest),dim=0)
-        
+
         YTest_pred, mse_test = predict(model,XTest_,YTest_)
-        ytest_true = YTest.detach().numpy()
-        ytest_pred = YTest_pred[init_samples:].detach().numpy()
+        ytest_true = YTest.cpu().detach().numpy()
+        ytest_pred = YTest_pred[init_samples:].cpu().detach().numpy() - bias
         offset = ytest_pred[0] - ytest_true[0]
         ytest_pred = ytest_pred - offset
         all_mse.append(mse_test)
@@ -234,11 +277,6 @@ def plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples):
         ax.scatter(ytest_pred[-1,0],ytest_pred[-1,1],s=50,color='indianred')
         ax.set_title(f'MSE={mse_test:.5f}')
 
-        ave_mse = np.array(all_mse).mean(0)
-        plt.suptitle(f'Average Test MSE={ave_mse:.5f}', fontweight='bold')
-        plt.tight_layout()
-        plt.show()
-
     ave_mse = np.array(all_mse).mean(0)
     plt.suptitle(f'Average Test MSE={ave_mse:.5f}', fontweight='bold')
     plt.tight_layout()
@@ -246,7 +284,7 @@ def plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples):
     return ave_mse
 
 # Forward predictions
-def forward_prediction(model,train_x,train_y,t_train,window_size):
+def forward_prediction(model,train_x,train_y,t_train,window_size,bias):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     u_dim = 2
 
@@ -254,28 +292,50 @@ def forward_prediction(model,train_x,train_y,t_train,window_size):
     ytrain = train_y[window_size:,:]
     x_tw = train_x[:window_size,:u_dim]
     y_tw = train_x[:window_size,u_dim:]
-    ypred_k = train_x[window_size,u_dim:]
+    ypred_k = train_x[window_size,u_dim:] - bias
     ypred = y_tw
 
     for i in range(window_size,len(train_y)):
-        # Get new emg window
-        x_i = train_x[i,:u_dim]
-        x_tw = np.vstack((x_tw,x_i))[-window_size:,:]
-        X_tw = torch.from_numpy(x_tw).unsqueeze(0).float().to(device)
+        with torch.no_grad():
+            # Get new emg window
+            x_i = train_x[i,:u_dim]
+            x_tw = np.vstack((x_tw,x_i))[-window_size:,:]
+            X_tw = torch.from_numpy(x_tw).unsqueeze(0).float().to(device)
 
-        # Get last predictions
-        y_i = ypred_k
-        y_tw = np.vstack((y_tw,y_i))[-window_size:,:]
-        Y_tw = torch.from_numpy(y_tw).unsqueeze(0).float().to(device)
+            # Get last predictions
+            y_i = ypred_k
+            y_tw = np.vstack((y_tw,y_i))[-window_size:,:]
+            Y_tw = torch.from_numpy(y_tw).unsqueeze(0).float().to(device)
 
-        # Concatenate to create network input (1,window,6)
-        input_tw = torch.cat((X_tw,Y_tw),dim=2)
+            # Concatenate to create network input (1,window,6)
+            input_tw = torch.cat((X_tw,Y_tw),dim=2)
 
-        # Normalize input
-        # input_tw = input_tw.sub_(X_mu).div_(X_std)
+            # Normalize input
+            # input_tw = input_tw.sub_(X_mu).div_(X_std)
 
-        # Make prediction
-        ypred_k = model(input_tw).cpu().detach().numpy()
-        ypred = np.vstack((ypred,ypred_k))
+            # Make prediction
+            ypred_k = model(input_tw).cpu().detach().numpy() - bias
+            ypred = np.vstack((ypred,ypred_k))
 
     return ytrain, ypred[window_size:,:], t_train[window_size:]
+
+
+def process_input_traj(x_train,y_train,model,window_size,len_traj,device):
+    dim_input, dim_output  = x_train.shape[2], y_train.shape[2]
+
+    # Create dataset
+    X = torch.zeros(1,len_traj-window_size,window_size,dim_input).to(device)
+    Y = torch.zeros(1,len_traj-window_size,dim_output).to(device)
+
+    for k in range(len(x_train)):
+        input_  = x_train[k,:,:] # theta, phi, theta_dot, phi_dot
+        target_ = y_train[k,:,:] # u = uc + ug
+
+        # Create time-windows for training
+        XTrain, YTrain, T_train = model.process_input(input_, window_size, offset=1,
+                                                    y=target_, time=None)
+        
+        X = torch.cat((X,XTrain.unsqueeze(0)))
+        Y = torch.cat((Y,YTrain.unsqueeze(0)))
+
+    return X[1:], Y[1:]

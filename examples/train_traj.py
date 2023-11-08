@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from emg_regression.approximators.lstm import LSTM
 from emg_regression.utils.trainer import Trainer
 from emg_regression.utils.model_tools import *
-import random
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -18,6 +17,7 @@ u_traj = data['u'] # u = uc + ug
 uc_traj = data['uc']
 ug_traj = data['ug']
 nb_traj = len(x_traj)
+len_traj = len(x_traj[0])
 
 # Dataset
 # xin  = np.concatenate((u_traj[:,:-1,:], x_traj[:,:-1,:2]), axis=2)
@@ -26,17 +26,17 @@ nb_traj = len(x_traj)
 # System identification
 # xin  = u_traj[:,:,:]
 # yout = x_traj[:,:,:2]
+# t_ = t
 
 # Set training params
 dt = 0.01             # 100 Hz , 100 samples/ second
 fs = 1/dt
-t_ = t[1:]
 
-normalize_input  = False
-normalize_output = False
+normalize_input  = 1
+normalize_states = 0
 
 # LSTM
-dim_hidden = 40
+dim_hidden = 50
 nb_layers = 2
 dim_pre_output = 20
 bidirectional = False
@@ -45,19 +45,23 @@ time_window = 0.1 #s
 offset = 1
 
 # train
-mini_batch_size = 20
+mini_batch_size = 15
 learning_rate = 1e-3
 weight_decay  = 1e-6
 training_ratio = 0.75
 nb_epochs = 50
 
+# Testing
+# batch_size = len_traj
+
 # Prepare data to make forward predictions
 imu_inputs  = 'pos'
 imu_outputs = 'pos'
 xin, yout = prepare_dataset(u_traj,x_traj,imu_inputs,imu_outputs)
+t_ = t[1:]
 
 # Training and testing dataset
-x_train, y_train, x_test, y_test = split_train_test_traj(xin,yout,nb_traj,training_ratio)
+x_train, y_train, x_test, y_test = split_train_test_traj(xin,yout,nb_traj,training_ratio,shuffle=True)
 
 # Get normalization on training dataset (for only u, for all input and all output)
 u_mu, u_std, xin_mu, xin_std, yout_mu, yout_std = get_normalization(x_train[:,:,:2],x_train,y_train)
@@ -69,33 +73,74 @@ window_size = int(time_window*fs)
 print('- dim_input:',dim_input,', dim_output:',dim_output)
 print('- window_size:',window_size)
 
+# Normalize
+if normalize_input:
+  # For this type of data, min/max normalization is best result
+  umax, umin = abs(x_train[:,:,:2].max(0).max(0)), abs(x_train[:,:,:2].min(0).min(0))
+  for i in range(dim_u):
+    x_train[:,:,i] = np.where(x_train[:,:,i]>=0, x_train[:,:,i]/umax[i],x_train[:,:,i]/umin[i])
+    x_test[:,:,i] = np.where(x_test[:,:,i]>=0, x_test[:,:,i]/umax[i], x_test[:,:,i]/umin[i])
+  print("Input normalized")
+
+if normalize_states:
+  ymax, ymin = abs(y_train.max(0).max(0)), abs(y_train.min(0).min(0))
+  for i in range(dim_output):
+    y_train[:,:,i] = np.where(y_train[:,:,i]>=0, y_train[:,:,i]/ymax[i], y_train[:,:,i]/ymin[i])
+    y_test[:,:,i]  = np.where(y_test[:,:,i] >=0, y_test[:,:,i]/ ymax[i], y_test[:,:,i]/ ymin[i])
+  print("States normalized")
+
+
 # Model
-model = LSTM(dim_input, dim_hidden, nb_layers, dim_pre_output, dim_output, bidirectional)
+model = LSTM(dim_input, dim_hidden, nb_layers, dim_pre_output, dim_output, bidirectional).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 loss_fun = torch.nn.MSELoss()          
 loss_log = np.array([])
+hidden = model.initialize_states(batch_size=len_traj-window_size)
 
+# Prepare dataset
+XTrain, YTrain = process_input_traj(x_train,y_train,model,window_size,len_traj,device)
+
+mini_batch_size = len_traj-window_size
 try:
   for epoch in range(nb_epochs):
-    for i in range(nb_train):
-      input_  = x_train[i,:,:] # theta, phi, theta_dot, phi_dot
-      target_ = y_train[i,:,:] # u = uc + ug
 
-      # Normalization
-      input_ = (input_ - xin_mu)/xin_std if normalize_input else input_
-      target_= (target_- yout_mu)/yout_std if normalize_output else target_
+    hidden = model.initialize_states(batch_size=mini_batch_size)
 
-      # Create time-windows for training
-      XTrain, YTrain, T_train = model.process_input(input_, window_size, offset=1,
-                                                    y=target_, time=t_)
-      # Train
-      optimizer.zero_grad()
-      pred = model(XTrain)
-      loss = loss_fun(pred,YTrain)
-      loss_log = np.append(loss_log,loss.item())
-      loss.backward()
-      optimizer.step()
-      print("EPOCH: ", epoch, " |  TRAJ:",i, " |  LOSS: ", loss_log[-1])
+    for i in range(len(XTrain)):
+      XTrain_traj, YTrain_traj = XTrain[i], YTrain[i]
+      torch_dataset = torch.utils.data.TensorDataset(XTrain_traj, YTrain_traj)
+      
+      # Create loader
+      loader = torch.utils.data.DataLoader(dataset=torch_dataset, 
+                                           batch_size=mini_batch_size, 
+                                           shuffle=False, num_workers=0)
+      
+      batch_loss = []
+      for iter, (X_batch, Y_batch) in enumerate(loader):  # for each training step
+                                              
+        # Train trajectory in batches
+        # for j in range(len(XTrain)):
+        #   print(j)
+        #   X_batch = XTrain[j:j+batch_size]
+        #   Y_batch = YTrain[j:j+batch_size]
+
+        # Train
+        optimizer.zero_grad()
+        pred, hidden = model.forward_predict(X_batch,hidden)
+        loss = loss_fun(pred,Y_batch)
+        loss.backward()
+        optimizer.step()
+
+        h_0, c_0 = hidden
+        h_0.detach_(), c_0.detach_()    # remove gradient information
+        hidden = (h_0, c_0)
+        loss_log = np.append(loss_log,loss.item())
+
+        batch_loss.append(loss.item())
+
+      ave_traj_loss = np.array(batch_loss).mean()
+      print("EPOCH: ", epoch, " |  TRAJ:",i, " |  LOSS: ", ave_traj_loss)
+      # print("EPOCH: ", epoch, " |  TRAJ:",i, " |  LOSS: ", loss.item())
 
 except KeyboardInterrupt:
     pass
@@ -106,45 +151,159 @@ plt.subplots(figsize=(4,3))
 plt.plot(loss_log)
 plt.show()
 
+# check initial bias, offset 
+init_samples = 300
+X_init = torch.zeros(init_samples,window_size,dim_input).to(device)
+Y_init = torch.zeros(init_samples,dim_output).to(device)
+Ypred_init, _ = predict(model, X_init,Y_init)
+bias = (Y_init - Ypred_init).mean(0).cpu().detach().numpy()
+
+
 # Check accuracy for one trajectory
-XTest, YTest, T_test = approximator.process_input(x_test[i,:,:], window_size, offset=1,
+i = 1
+XTrain, YTrain, T_train = model.process_input(x_train[i,:,:], window_size, offset=1,
+                                              y=y_train[i,:,:], time=t_)
+XTest, YTest, T_test = model.process_input(x_test[i,:,:], window_size, offset=1,
                                           y=y_test[i,:,:], time=t_)
-mse_train, mse_test = evaluate_model(approximator,
-                                     XTrain=XTrain,YTrain=YTrain,
-                                     XTest=XTest,YTest=YTest,
-                                     t_train=T_train, t_test=T_test,
+mse_train, mse_test = evaluate_model(model,
+                                     XTrain=XTrain,YTrain=YTrain,t_train=T_train,
+                                     XTest=XTest,YTest=YTest,t_test=T_test,
+                                     bias=bias,
                                      vis=1)
 
-# Evaluate on testing set:
-init_samples = 300
-# Ypred_init,_ = predict(model, X_init,Y_init)
+# Evaluate paths on training and testing set:
+fig, axes = plt.subplots(5,5,figsize=(14,10))
+ave_mse = plot_predicted_paths(axes,x_train,y_train,model,window_size,init_samples=300)
+
+
 # bias = (Ypred_init.detach().numpy()).mean(0)
 fig, axes = plt.subplots(5,5,figsize=(14,10))
 ave_mse = plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples)
 
 
 # Forward predictions
-# pad it with zeros at the beggining
-k = 5
-N = 1000
-train_x = np.pad(x_train[k, :, :], ((N, 0), (0, 0)), mode='constant')
-train_y = np.pad(y_train[k, :, :], ((N, 0), (0, 0)), mode='constant')
+# TODO: Try foward predictions on Training set, I should obtain something similar to the case in which 
+# my input is uin + yin(k-1)
 
-test_x = np.pad(x_test[k, :, :], ((N, 0), (0, 0)), mode='constant')
-test_y = np.pad(y_test[k, :, :], ((N, 0), (0, 0)), mode='constant')
 
-t_pad = np.arange(0,len(train_x)*dt,dt)
+def inference(x_train,y_train,k,batch_size,init_samples):
+  sample_size = window_size + (batch_size-1)
 
-ytrue_train, ypred_train, t_train = forward_prediction(model,train_x,train_y,t_pad,window_size)
+  train_x = np.pad(x_train[k,:,:], ((init_samples,0), (0,0)), mode='constant').astype(float)
+  train_y = np.pad(y_train[k,:,:], ((init_samples,0), (0,0)), mode='constant').astype(float)
+  t_pad = np.arange(0,len(train_x)*dt,dt)
 
-print(ytrue_train.shape, ypred_train.shape, t_train.shape)
+  u_tw     = train_x[:sample_size,:2]
+  yin_tw   = train_x[:sample_size,2:]
+  ypred_k  = train_y[sample_size-1]
+  input_tw = np.hstack((u_tw,yin_tw))
 
-ytrue_test, ypred_test, t_test = forward_prediction(model,test_x,test_y,t_pad,window_size)
+  X_batch,Y_batch,_ = model.process_input(x=input_tw,window_size=window_size,offset=1)
+  print(f'Í will wait for {sample_size} samples')
 
-mse_train, mse_test =  plot_regression(
-                          ytrain=ytrue_train, ytrain_pred=ypred_train, t_train=t_train, 
-                          ytest=ytrue_test, ytest_pred=ypred_test,t_test=t_test
-                          )
+  ypred = np.array([]).reshape(0,2)
+  model.eval()
+  # hidden = model.initialize_states(batch_size)
+
+  for i in range(sample_size, len(train_x)):
+
+    u_i = train_x[i,:2]
+    yin_i = ypred_k
+    input_i = np.append(u_i,yin_i)[np.newaxis]
+
+    input_tw = np.vstack((input_tw, input_i))[-window_size:,:]
+    Input_tw = torch.from_numpy(input_tw).unsqueeze(0).float().to(device)
+
+    X_batch = torch.cat((X_batch,Input_tw))[-batch_size:]
+    # Ypred_tw, hidden  = model.forward_predict(X_batch, hidden)
+    # h_0, c_0 = hidden
+    # h_0.detach_(), c_0.detach_()    # remove gradient information
+    # hidden = (h_0, c_0)
+    Ypred_tw  = model(X_batch)
+    ypred_tw  = Ypred_tw.cpu().detach().numpy()
+    ypred_k   = ypred_tw[-1]
+    ypred = np.vstack((ypred, ypred_k))
+
+  ytrain   = train_y[sample_size:]
+  t_train_ = t_pad[sample_size:]
+  # mse_train, mse_test =  plot_regression(
+  #                           ytrain=ytrain, ytrain_pred=ypred, t_train=t_train_ )
+
+  return ypred, t_train_
+
+k = 2
+batch_size = 10
+init_samples = 0
+
+inference(x_train,y_train,k,batch_size,init_samples)
+
+
+batch_sizes = np.arange(1,280,20)
+y1, t1 = [],[]
+for batch_size in batch_sizes:
+  print(batch_size)
+  ypred_, tp_ = inference(x_train,y_train,k,batch_size,init_samples)
+  y1.append(ypred_)
+  t1.append(tp_)
+
+colormap = plt.cm.get_cmap('viridis', len(batch_sizes))
+
+fig, ax = plt.subplots(2,1)
+for i, batch_size in enumerate(batch_sizes):
+    color = colormap(i / len(batch_sizes))
+    for m in range(2):
+      if i==0:
+        ax[m].plot(t_, y_train[k,:,:][:,m], label=f'Batch Size {batch_size}',color=color)
+      ax[m].plot(t1[i], y1[i][:,m], label=f'Batch Size {batch_size}',color=color)
+      ax[m].grid()
+ax[0].legend()
+plt.show()
+
+##### =============================
+# The correct and expected predictions
+XTrain, YTrain, T_train = model.process_input(x_train[k,:,:], window_size, offset=1,
+                                          y=y_train[k,:,:], time=t_)
+
+ypred_all = model(XTrain).cpu().detach().numpy()
+plt.plot(T_train,YTrain.cpu().detach().numpy())
+plt.plot(T_train,ypred_all)
+plt.show()
+
+##### =============================
+# What's the effect of batch length in prediction?  
+ 
+batch_size = 5
+total_steps = len(XTrain) - batch_size + 1
+
+
+ypred = np.array([]).reshape(0,2)
+t2 = T_train[batch_size-1:]
+for i in range(total_steps):
+  
+  X_batch = XTrain[i:i+batch_size]
+
+
+  ypred_ = model(X_batch)[-1].cpu().detach().numpy()[np.newaxis]
+  ypred = np.vstack((ypred,ypred_))
+
+plt.plot(t_,y_train[k,:,:])
+
+plt.plot(t2,ypred)
+plt.show()
+
+
+
+
+
+# ytrue_train, ypred_train, t_train = forward_prediction(model,train_x,train_y,t_pad,window_size,bias)
+
+
+# ytrue_test, ypred_test, t_test = forward_prediction(model,test_x,test_y,t_pad,window_size,bias)
+
+# mse_train, mse_test =  plot_regression(
+#                           ytrain=ytrue_train, ytrain_pred=ypred_train, t_train=t_train, 
+#                           ytest=ytrue_test, ytest_pred=ypred_test,t_test=t_test
+#                           )
 
 
 ##

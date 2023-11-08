@@ -33,7 +33,7 @@ class LSTM(nn.Module):
 
         self.fc_y2c = nn.Linear(in_features=dim_pre_output_layer, out_features=dim_output)
 
-        self.drop = nn.Dropout(p=0.2)
+        # self.drop = nn.Dropout(p=0.2)
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -47,25 +47,39 @@ class LSTM(nn.Module):
         # output, _ = self.lstm(X, (h0.detach(), c0.detach()))
         output, _ = self.lstm(X, (h0, c0))
         output = self.fc_o2y(output[:, -1, :])
-        # output = self.drop(output)
         output = F.relu(output)
         output = self.fc_y2c(output)
 
         return output
     
+    def initialize_states(self,batch_size):
+        h0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(self.device)
+        c0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(self.device)
+        return (h0, c0)
+
+    def forward_predict(self, X, hidden):
+        # output, _ = self.lstm(X, (h0.detach(), c0.detach()))
+        output, hidden = self.lstm(X,hidden)
+        output = self.fc_o2y(output[:, -1, :])
+        output = F.relu(output)
+        output = self.fc_y2c(output)
+
+        return output, hidden
+
     
     def process_input(self, x, window_size, offset, y=None, time=None):
         """
         Reshape data in time-windows displaced by an offset for time-series label prediction 
         """
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        X = torch.empty(1, window_size, self.dim_input).float().to(device)
-        Y = torch.empty(1, self.dim_output).float().to(device)
+        X = torch.empty(1, window_size, self.dim_input).float().to(self.device)
+        Y = torch.empty(1, self.dim_output).float().to(self.device)
 
         X0 = torch.from_numpy(x) if isinstance(x,np.ndarray) else x
-        Y0 = torch.from_numpy(y.copy()) if y is not None and isinstance(y, np.ndarray) else y
-        X0 = X0.to(device)
-        Y0 = Y0.to(device)
+        X0 = X0.to(self.device)
+
+        if y is not None:
+            Y0 = torch.from_numpy(y.copy()) if isinstance(y, np.ndarray) else y
+            Y0 = Y0.to(self.device)            
 
         t  = np.array([])
 
