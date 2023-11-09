@@ -41,7 +41,7 @@ nb_layers = 2
 dim_pre_output = 20
 bidirectional = False
 
-time_window = 0.1 #s
+time_window = 0.05 #s
 offset = 1
 
 # train
@@ -104,39 +104,30 @@ mini_batch_size = len_traj-window_size
 try:
   for epoch in range(nb_epochs):
 
-    hidden = model.initialize_states(batch_size=mini_batch_size)
+    (h0, c0) = model.initialize_states(batch_size=mini_batch_size)
 
     for i in range(len(XTrain)):
       XTrain_traj, YTrain_traj = XTrain[i], YTrain[i]
+      
+      # Create loader for batch training
       torch_dataset = torch.utils.data.TensorDataset(XTrain_traj, YTrain_traj)
-      
-      # Create loader
-      loader = torch.utils.data.DataLoader(dataset=torch_dataset, 
-                                           batch_size=mini_batch_size, 
-                                           shuffle=False, num_workers=0)
-      
+      loader = torch.utils.data.DataLoader(dataset=torch_dataset,batch_size=mini_batch_size,shuffle=False,num_workers=0)
+  
+      # Train
       batch_loss = []
-      for iter, (X_batch, Y_batch) in enumerate(loader):  # for each training step
-                                              
-        # Train trajectory in batches
-        # for j in range(len(XTrain)):
-        #   print(j)
-        #   X_batch = XTrain[j:j+batch_size]
-        #   Y_batch = YTrain[j:j+batch_size]
-
-        # Train
+      for iter, (X_batch, Y_batch) in enumerate(loader):  # for each training step                              
         optimizer.zero_grad()
-        pred, hidden = model.forward_predict(X_batch,hidden)
+        pred, (h0, c0) = model.forward_predict(X_batch,(h0, c0))
         loss = loss_fun(pred,Y_batch)
         loss.backward()
         optimizer.step()
 
-        h_0, c_0 = hidden
-        h_0.detach_(), c_0.detach_()    # remove gradient information
-        hidden = (h_0, c_0)
-        loss_log = np.append(loss_log,loss.item())
+        h0.detach_(), c0.detach_()    # remove gradient information
 
-        batch_loss.append(loss.item())
+        # Record losses
+        loss_batch = loss.item()
+        batch_loss.append(loss_batch)
+        loss_log = np.append(loss_log,loss_batch)
 
       ave_traj_loss = np.array(batch_loss).mean()
       print("EPOCH: ", epoch, " |  TRAJ:",i, " |  LOSS: ", ave_traj_loss)
@@ -157,7 +148,6 @@ X_init = torch.zeros(init_samples,window_size,dim_input).to(device)
 Y_init = torch.zeros(init_samples,dim_output).to(device)
 Ypred_init, _ = predict(model, X_init,Y_init)
 bias = (Y_init - Ypred_init).mean(0).cpu().detach().numpy()
-
 
 # Check accuracy for one trajectory
 i = 1

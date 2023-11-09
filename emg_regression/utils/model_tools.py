@@ -212,34 +212,6 @@ def split_train_test_traj(xin,yout,nb_traj,training_ratio,shuffle=True):
 
     return xin_train, yout_train, xin_test, yout_test
 
-# Batch forward prediction
-
-# Forward predictions
-def batch_prediction(model,train_x,train_y,t_train,window_size,bias):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    u_dim = 2
-
-    i = 2
-    input_  = x_test[i,:,:] # theta, phi, theta_dot, phi_dot
-    target_ = y_test[i,:,:] # u = uc + ug
-
-    XTest, YTest, T_test = model.process_input(input_, window_size, offset=1,
-                                                y=target_, time=t_)
-
-    batch_size = 5
-    ypred = np.array([]).reshape(0,2)
-    all_mse = []
-    for j in range(0,len(XTest),batch_size):
-        X_batch = XTest[j:j+batch_size]
-        Y_batch = YTest[j:j+batch_size]
-        Ypred_batch, mse_batch = predict(model,X_batch,Y_batch)
-        ypred_batch = Ypred_batch.cpu().detach().numpy()
-        ypred = np.vstack((ypred,ypred_batch))
-        all_mse.append(mse_batch)
-
-    ytrue = YTest.cpu().detach().numpy()
-    t_test = T_test
-
 
 def plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -283,41 +255,84 @@ def plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples):
     plt.show()
     return ave_mse
 
+def get_sliding_windows(input_tw_hat,window_size):
+    input_dim = input_tw_hat.shape[1]
+    Input_tw_hat = torch.empty((1,window_size,input_dim))
+    for k in range(0,len(input_tw_hat),1):
+        input_tw_k = input_tw_hat[k:k+window_size].unsqueeze(0)
+        try: Input_tw_hat = torch.cat((Input_tw_hat,input_tw_k))
+        except: pass
+    return Input_tw_hat[1:]
+
 # Forward predictions
-def forward_prediction(model,train_x,train_y,t_train,window_size,bias):
+def forward_prediction(model,u,y,window_size,batch_size):
+    # add different options
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    u_dim = 2
 
-    # Unseen predictions on Training set
-    ytrain = train_y[window_size:,:]
-    x_tw = train_x[:window_size,:u_dim]
-    y_tw = train_x[:window_size,u_dim:]
-    ypred_k = train_x[window_size,u_dim:] - bias
-    ypred = y_tw
+    u_dim, y_dim = u.shape[1], y.shape[1]
+    num_samples_batch = window_size + (batch_size -1)
 
-    for i in range(window_size,len(train_y)):
+    U = torch.from_numpy(u).float().to(device)
+    Y = torch.from_numpy(y).float().to(device)
+    input_tw_hat   = torch.zeros((num_samples_batch-1,u_dim+y_dim)).to(device)
+    input_tw_real  = torch.zeros((num_samples_batch-1,u_dim+y_dim)).to(device)
+
+    ypred          = np.zeros((1,y_dim))
+    ypred_real     = np.zeros((1,y_dim))
+    ypred_mem      = np.zeros((1,y_dim))
+    ypred_real_mem = np.zeros((1,y_dim))
+
+    model.eval()
+    (h0, c0) = model.initialize_states(batch_size)
+    (h1, c1) = model.initialize_states(batch_size)
+
+    for i in range(0,len(u)):
         with torch.no_grad():
-            # Get new emg window
-            x_i = train_x[i,:u_dim]
-            x_tw = np.vstack((x_tw,x_i))[-window_size:,:]
-            X_tw = torch.from_numpy(x_tw).unsqueeze(0).float().to(device)
+            # Receive new sample and append previous prediction
+            u_i = U[i,:].unsqueeze(0)
+            y_i_hat = torch.from_numpy(ypred[-1]).unsqueeze(0).float().to(device)
+            y_i_real = Y[i,:].unsqueeze(0)
+            input_i_hat  = torch.cat((u_i,y_i_hat),dim=1)
+            input_i_real = torch.cat((u_i,y_i_real),dim=1)
 
-            # Get last predictions
-            y_i = ypred_k
-            y_tw = np.vstack((y_tw,y_i))[-window_size:,:]
-            Y_tw = torch.from_numpy(y_tw).unsqueeze(0).float().to(device)
+            # append new sample to past time window and slide window
+            input_tw_hat  = torch.cat((input_tw_hat,input_i_hat))  [-num_samples_batch:,:]
+            input_tw_real = torch.cat((input_tw_real,input_i_real))[-num_samples_batch:,:]
 
-            # Concatenate to create network input (1,window,6)
-            input_tw = torch.cat((X_tw,Y_tw),dim=2)
+            # create windows
+            Input_tw_hat  = get_sliding_windows(input_tw_hat,window_size)
+            Input_tw_real = get_sliding_windows(input_tw_real,window_size)
 
-            # Normalize input
-            # input_tw = input_tw.sub_(X_mu).div_(X_std)
+            # batch of size (1,5,4) to feed to model
+            # Input_tw_hat  = input_tw_hat.unsqueeze(0)
+            # Input_tw_real = input_tw_real.unsqueeze(0)
 
-            # Make prediction
-            ypred_k = model(input_tw).cpu().detach().numpy() - bias
-            ypred = np.vstack((ypred,ypred_k))
+            # Model prediction trying different inputs and memory cell configurations
+            Ypred_hat, (h0,c0) = model.forward_predict(Input_tw_hat,(h0,c0)) # one window of (1,5,4) gives (1,2)
+            Ypred_real,(h1,c1) = model.forward_predict(Input_tw_real,(h1,c1))
+            # Ypred_hat_mem  = model(Input_tw_hat)
+            # Ypred_real_mem = model(Input_tw_real)
 
-    return ytrain, ypred[window_size:,:], t_train[window_size:]
+            h0.detach_(), c0.detach_()
+            h1.detach_(), c1.detach_()    # remove gradient information
+
+            ypred          = np.vstack((ypred,Ypred_hat[-1,np.newaxis].cpu().detach().numpy()))  
+            ypred_real     = np.vstack((ypred_real,Ypred_real[-1,np.newaxis].cpu().detach().numpy()))  
+            # ypred_mem      = np.vstack((ypred_mem,Ypred_hat_mem[-1,np.newaxis].cpu().detach().numpy()))   # no cell state passed
+            # ypred_real_mem = np.vstack((ypred_real_mem,Ypred_real_mem.cpu().detach().numpy()))  
+            
+    fig, ax = plt.subplots(2,1)
+    for m in range(2):
+        ax[m].plot(y[1:,m],label='ytrue')
+        ax[m].plot(ypred_real[:,m],label='yreal_in')
+        ax[m].plot(ypred_real_mem[:,m],label='yreal_in_mem')
+        ax[m].plot(ypred[:,m],label='ypred_in')
+        ax[m].plot(ypred_mem[:,m],label='ypred_in_mem')
+        ax[m].grid()
+    ax[0].legend()
+    plt.show()
+
+    return ypred
 
 
 def process_input_traj(x_train,y_train,model,window_size,len_traj,device):
