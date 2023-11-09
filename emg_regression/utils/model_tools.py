@@ -14,8 +14,9 @@ def compute_loss(predicted, target_data):
         return F.mse_loss(predicted, target_data)
 
 def predict(model,X,Y):
-    YPred = model(X)
-    mse = compute_loss(YPred,Y).item()
+    with torch.no_grad():
+        YPred = model(X)
+        mse = compute_loss(YPred,Y).item()
     return YPred, mse
 
 def evaluate_model(model,XTrain,YTrain,vis=None,t_train=None,XTest=None,YTest=None,t_test=None,bias=None):
@@ -255,79 +256,90 @@ def plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples):
     plt.show()
     return ave_mse
 
-def get_sliding_windows(input_tw_hat,window_size):
+def get_sliding_windows(input_tw_hat,window_size,device):
     input_dim = input_tw_hat.shape[1]
-    Input_tw_hat = torch.empty((1,window_size,input_dim))
+    Input_tw = torch.empty((1,window_size,input_dim)).to(device)
     for k in range(0,len(input_tw_hat),1):
         input_tw_k = input_tw_hat[k:k+window_size].unsqueeze(0)
-        try: Input_tw_hat = torch.cat((Input_tw_hat,input_tw_k))
+        try: Input_tw = torch.cat((Input_tw,input_tw_k))
         except: pass
-    return Input_tw_hat[1:]
+    return Input_tw[1:]
 
 # Forward predictions
-def forward_prediction(model,u,y,window_size,batch_size):
+def forward_prediction(model,x,y,window_size,batch_size):
     # add different options
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.eval()
 
+    u = x[:,:2]
     u_dim, y_dim = u.shape[1], y.shape[1]
     num_samples_batch = window_size + (batch_size -1)
 
     U = torch.from_numpy(u).float().to(device)
     Y = torch.from_numpy(y).float().to(device)
-    input_tw_hat   = torch.zeros((num_samples_batch-1,u_dim+y_dim)).to(device)
-    input_tw_real  = torch.zeros((num_samples_batch-1,u_dim+y_dim)).to(device)
+    input_tw_hat = torch.from_numpy(x[:num_samples_batch,:]).float().to(device)
+    ypred = np.array([]).reshape(0,2)
 
-    ypred          = np.zeros((1,y_dim))
-    ypred_real     = np.zeros((1,y_dim))
-    ypred_mem      = np.zeros((1,y_dim))
-    ypred_real_mem = np.zeros((1,y_dim))
+    # input_tw_hat   = torch.zeros((num_samples_batch-1,u_dim+y_dim)).to(device)
+    # input_tw_real  = torch.zeros((num_samples_batch-1,u_dim+y_dim)).to(device)
+    # ypred          = np.zeros((1,y_dim))
+    # ypred_real     = np.zeros((1,y_dim))
+    # ypred_mem      = np.zeros((1,y_dim))
+    # ypred_real_mem = np.zeros((1,y_dim))
 
-    model.eval()
+    # X_init = torch.zeros((10,window_size,u_dim+y_dim)).to(device)
+    # Y_init = model(X_init)
+    # bias = (Y_init.cpu().detach().numpy()).mean(0)
+
     (h0, c0) = model.initialize_states(batch_size)
-    (h1, c1) = model.initialize_states(batch_size)
+    # (h1, c1) = model.initialize_states(batch_size)
 
-    for i in range(0,len(u)):
+    for i in range(num_samples_batch,len(u)):
+
+        # create windows
+        Input_tw_hat  = get_sliding_windows(input_tw_hat,window_size,device)
+        # batch of size (1,5,4) to feed to model
+        # Input_tw_hat  = input_tw_hat.unsqueeze(0)
+
+        # Model prediction trying different inputs and memory cell configurations
         with torch.no_grad():
-            # Receive new sample and append previous prediction
-            u_i = U[i,:].unsqueeze(0)
-            y_i_hat = torch.from_numpy(ypred[-1]).unsqueeze(0).float().to(device)
-            y_i_real = Y[i,:].unsqueeze(0)
-            input_i_hat  = torch.cat((u_i,y_i_hat),dim=1)
-            input_i_real = torch.cat((u_i,y_i_real),dim=1)
-
-            # append new sample to past time window and slide window
-            input_tw_hat  = torch.cat((input_tw_hat,input_i_hat))  [-num_samples_batch:,:]
-            input_tw_real = torch.cat((input_tw_real,input_i_real))[-num_samples_batch:,:]
-
-            # create windows
-            Input_tw_hat  = get_sliding_windows(input_tw_hat,window_size)
-            Input_tw_real = get_sliding_windows(input_tw_real,window_size)
-
-            # batch of size (1,5,4) to feed to model
-            # Input_tw_hat  = input_tw_hat.unsqueeze(0)
-            # Input_tw_real = input_tw_real.unsqueeze(0)
-
-            # Model prediction trying different inputs and memory cell configurations
             Ypred_hat, (h0,c0) = model.forward_predict(Input_tw_hat,(h0,c0)) # one window of (1,5,4) gives (1,2)
-            Ypred_real,(h1,c1) = model.forward_predict(Input_tw_real,(h1,c1))
-            # Ypred_hat_mem  = model(Input_tw_hat)
-            # Ypred_real_mem = model(Input_tw_real)
-
             h0.detach_(), c0.detach_()
-            h1.detach_(), c1.detach_()    # remove gradient information
+            # Ypred_hat  = model(Input_tw_hat)
+        # append new prediction
+        ypred_hat = Ypred_hat[-1,np.newaxis].cpu().detach().numpy()
+        ypred  = np.vstack((ypred,ypred_hat))          
 
-            ypred          = np.vstack((ypred,Ypred_hat[-1,np.newaxis].cpu().detach().numpy()))  
-            ypred_real     = np.vstack((ypred_real,Ypred_real[-1,np.newaxis].cpu().detach().numpy()))  
-            # ypred_mem      = np.vstack((ypred_mem,Ypred_hat_mem[-1,np.newaxis].cpu().detach().numpy()))   # no cell state passed
-            # ypred_real_mem = np.vstack((ypred_real_mem,Ypred_real_mem.cpu().detach().numpy()))  
+
+        # Receive new sample and append previous prediction
+        u_i = U[i,:].unsqueeze(0)
+        input_i_hat  = torch.cat((u_i,Ypred_hat[-1,np.newaxis]),dim=1)
+ 
+        # append new sample to past time window and slide window
+        input_tw_hat  = torch.cat((input_tw_hat,input_i_hat))[-num_samples_batch:,:]
+        
+        # Same for real values
+        #  y_i_real = Y[i,:].unsqueeze(0)
+        # input_i_real = torch.cat((u_i,y_i_real),dim=1)
+        # input_tw_real = torch.cat((input_tw_real,input_i_real))[-num_samples_batch:,:]
+        # Input_tw_real = get_sliding_windows(input_tw_real,window_size,device)
+        # # Input_tw_real = input_tw_real.unsqueeze(0)
+        # Ypred_real,(h1,c1) = model.forward_predict(Input_tw_real,(h1,c1))
+        # # Ypred_real_mem = model(Input_tw_real)
+        # h1.detach_(), c1.detach_()    # remove gradient information
+
+        # ypred_real     = np.vstack((ypred_real,Ypred_real[-1,np.newaxis].cpu().detach().numpy()))  
+        # ypred_mem      = np.vstack((ypred_mem,Ypred_hat_mem[-1,np.newaxis].cpu().detach().numpy()))   # no cell state passed
+        # ypred_real_mem = np.vstack((ypred_real_mem,Ypred_real_mem[-1,np.newaxis].cpu().detach().numpy()))  
             
     fig, ax = plt.subplots(2,1)
     for m in range(2):
         ax[m].plot(y[1:,m],label='ytrue')
-        ax[m].plot(ypred_real[:,m],label='yreal_in')
-        ax[m].plot(ypred_real_mem[:,m],label='yreal_in_mem')
+        # ax[m].plot(ypred_real[:,m],label='yreal_in')
+        # ax[m].plot(ypred_real_mem[:,m],label='yreal_in_mem')
+        # ax[m].plot(ypred[:,m],label='ypred_in')
         ax[m].plot(ypred[:,m],label='ypred_in')
-        ax[m].plot(ypred_mem[:,m],label='ypred_in_mem')
+        # ax[m].plot(ypred_mem[:,m],label='ypred_in_mem')
         ax[m].grid()
     ax[0].legend()
     plt.show()

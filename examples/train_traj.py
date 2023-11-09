@@ -101,12 +101,13 @@ hidden = model.initialize_states(batch_size=len_traj-window_size)
 XTrain, YTrain = process_input_traj(x_train,y_train,model,window_size,len_traj,device)
 
 mini_batch_size = len_traj-window_size
+# mini_batch_size = 10
+
 try:
   for epoch in range(nb_epochs):
-
-    (h0, c0) = model.initialize_states(batch_size=mini_batch_size)
-
     for i in range(len(XTrain)):
+      
+      (h0, c0) = model.initialize_states(batch_size=mini_batch_size)
       XTrain_traj, YTrain_traj = XTrain[i], YTrain[i]
       
       # Create loader for batch training
@@ -170,6 +171,14 @@ ave_mse = plot_predicted_paths(axes,x_train,y_train,model,window_size,init_sampl
 fig, axes = plt.subplots(5,5,figsize=(14,10))
 ave_mse = plot_predicted_paths(axes,x_test,y_test,model,window_size,init_samples)
 
+k = 2
+u   = x_train[k,:,:2]
+y = y_train[k,:,:2]
+batch_size = 5
+
+ypred = forward_prediction(model,u,y,
+                   window_size,
+                   batch_size)
 
 # Forward predictions
 # TODO: Try foward predictions on Training set, I should obtain something similar to the case in which 
