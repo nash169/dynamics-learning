@@ -15,7 +15,7 @@ def compute_loss(predicted, target_data):
 
 def predict(model,X,Y):
     with torch.no_grad():
-        YPred = model(X)
+        YPred,_ = model(X)
         mse = compute_loss(YPred,Y).item()
     return YPred, mse
 
@@ -147,55 +147,108 @@ def load_model(params_path,model_path):
     model.eval()
 
 
-# Select input and output
-def get_input_output(train_x,train_y,option):
-    if option == 1:
-        input  = train_x # u1,u2
-        output = train_y[:,:2] # theta, phi
-        print("Input: u1(k), u2(k) -> Output: theta(k), phi(k)")
-
-    if option == 2:
-        input  = np.append(train_y[:-1,:2], train_x[:-1,:],axis=1) # theta(k), phi(k), u1(k), u2(k)
-        output = train_y[1:,:2] # theta(k+1), phi(k+1)
-        print("Input: theta(k), phi(k), u1(k), u2(k) -> Output: theta(k+1), phi(k+1) ")
-
-    if option == 3: # Option 3: (works with any network)
-        input  = np.append(train_y[:-1,:], train_x[:-1,:],axis=1) # theta(k), phi(k), theta_dot(k), phi_dot(k), u1(k), u2(k)
-        output = train_y[1:,:2] # theta(k+1), phi(k+1)
-        print("Input: theta(k), phi(k), theta_dot(k), phi_dot(k), u1(k), u2(k) -> Output: theta(k+1), phi(k+1)")
-    return input, output
-
-
 def running_mean(x, N):
     cumsum = np.cumsum(np.insert(x, 0, 0,axis=0),axis=0)
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
 
 # Trajectory processing
-def prepare_dataset(u_traj,x_traj,inputs,outputs):
-    if outputs == 'pos':
-        out_idxs = [0,1]
-    if outputs == 'vel':
-        out_idxs = [2,3]
-    if outputs == 'pos_vel':
-        out_idxs = [0,1,2,3]
-
-    if inputs == 'pos':
+def prepare_dataset(u_traj,x_traj,t,goal,imu_inputs,imu_outputs):
+    """" Choose between pos, vel or pos_vel to use as the input and output 
+        Goal: SI (system identification) or ForwardPred
+    """
+    if imu_inputs == 'pos':
         in_idxs = [0,1]
-    if inputs == 'vel':
+    if imu_inputs == 'vel':
         in_idxs = [2,3]
-    if inputs == 'pos_vel':
-        in_idxs = [0,1,2,3]
+    if imu_inputs == 'pos_vel':
+        in_idxs = [0,1,2,3]   
 
-    xin  = np.concatenate((u_traj[:,:-1,:], x_traj[:,:-1,in_idxs]), axis=2)
-    yout = x_traj[:,1:,out_idxs]
-    return xin, yout
+    if imu_outputs == 'pos':
+        out_idxs = [0,1]
+    if imu_outputs == 'vel':
+        out_idxs = [2,3]
+    if imu_outputs == 'pos_vel':
+        out_idxs = [0,1,2,3]
+    
+    dim = len(x_traj.shape) #if 3, I got (nbTraj,n,m)
+    if goal == 'SI': #system identification
+        xin  = u_traj
+        yout = x_traj[:,:,out_idxs] if dim == 3 else x_traj[:,out_idxs]
+        t_ = t
 
-def get_normalization(u_traj,xin,yout):
-    u_mu, u_std = u_traj.mean(0).mean(0), u_traj.std(0).std(0)
-    xin_mu, xin_std = xin.mean(0).mean(0), xin.std(0).std(0)
-    yout_mu, yout_std = yout.mean(0).mean(0), yout.std(0).std(0)
-    return u_mu, u_std, xin_mu, xin_std, yout_mu, yout_std
+    if goal == 'ForwardPred': #system identification
+        if dim == 3:
+            xin  = np.concatenate((u_traj[:,:-1,:], x_traj[:,:-1,in_idxs]), axis=2)
+            yout = x_traj[:,1:,out_idxs]
+        else:
+            xin  = np.concatenate((u_traj[:-1,:], x_traj[:-1,in_idxs]), axis=1)
+            yout = x_traj[1:,out_idxs]           
+        t_ = t[1:]
+
+    return xin, yout, t_
+
+
+# Normalization
+def normalize_dataset(x_train,y_train,
+                      normalize_input,normalize_states,
+                      input_norm,states_norm,
+                      norms=None,
+                      vis=None):
+
+    input, target = x_train.reshape(-1,x_train.shape[-1]), y_train.reshape(-1,y_train.shape[-1])
+    dim_u = 2
+    dim_inputstates = input.shape[-1] - dim_u
+    
+    if norms is None:
+        u_mu , u_std = input[:,:dim_u].mean(0), input[:,:dim_u].std(0)
+        u_min, u_max = abs(input[:,:dim_u].min(0)),  abs(input[:,:dim_u].max(0))
+        y_mu , y_std = target.mean(0),target.std(0)
+        y_min, y_max = abs(target.min(0)), abs(target.max(0))
+
+    else:
+        u_mu , u_std, u_min, u_max, y_mu , y_std, y_min, y_max = norms
+
+    input_n = input.copy()
+    target_n = target.copy()
+    
+    if normalize_input:
+        if input_norm == 'std':
+            input_n[:,:dim_u] = (input[:,:dim_u] - u_mu)/u_std
+
+        if input_norm == 'min-max':
+            for j in range(0,dim_u):
+                input_n[:,j] = np.where(input[:,j]>=0, input[:,j]/u_max[j], input[:,j]/u_min[j])
+
+    if normalize_states:
+        # normalize both in input and output
+        if states_norm == 'std':
+            input_n [:,dim_u:] = (input[:,dim_u:] - y_mu)/y_std
+            target_n = (target - y_mu)/y_std
+
+        if states_norm == 'min-max':
+            for j in range(dim_u,dim_u+dim_inputstates):
+                input_n[:,j] = np.where(input[:,j]>=0, input[:,j]/y_max[j-dim_u], input[:,j]/y_min[j-dim_u])
+            
+            for j in range(y_train.shape[-1]):
+                target_n[:,j] = np.where(target[:,j]>=0, target[:,j]/y_max[j], target[:,j]/y_min[j])
+
+    if vis:
+        plt.plot(input_n[:,:])
+        plt.plot(target_n[:,:])
+        plt.show()    
+    
+    # reshape data
+    input_n  = input_n.reshape(x_train.shape)
+    target_n = target_n.reshape(y_train.shape)
+
+    norms = [ u_mu , u_std, u_min, u_max, y_mu , y_std, y_min, y_max]
+
+    return input_n, target_n, norms
+
+
+def min_max_scaling(x,xmin,xmax):
+    return torch.where(x>=0, x/xmax, x/xmin)  
 
 def split_train_test_traj(xin,yout,nb_traj,training_ratio,shuffle=True):
     nb_train = int(nb_traj*training_ratio)
@@ -266,7 +319,7 @@ def get_sliding_windows(input_tw_hat,window_size,device):
     return Input_tw[1:]
 
 # Forward predictions
-def forward_prediction(model,x,y,window_size,batch_size):
+def forward_prediction(model,x,y,window_size,batch_size,correct_bias=False):
     # add different options
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
@@ -293,53 +346,37 @@ def forward_prediction(model,x,y,window_size,batch_size):
 
     (h0, c0) = model.initialize_states(batch_size)
     # (h1, c1) = model.initialize_states(batch_size)
+    bias = 0 
+    with torch.no_grad():
+        for i in range(num_samples_batch,len(u)):
 
-    for i in range(num_samples_batch,len(u)):
+            # create windows
+            Input_tw_hat  = get_sliding_windows(input_tw_hat,window_size,device)
 
-        # create windows
-        Input_tw_hat  = get_sliding_windows(input_tw_hat,window_size,device)
-        # batch of size (1,5,4) to feed to model
-        # Input_tw_hat  = input_tw_hat.unsqueeze(0)
+            # Model prediction trying different inputs and memory cell configurations
+            # Ypred_hat, (h0,c0) = model(Input_tw_hat, (h0,c0))
+            Ypred_hat, _ = model(Input_tw_hat)
 
-        # Model prediction trying different inputs and memory cell configurations
-        with torch.no_grad():
-            Ypred_hat, (h0,c0) = model.forward_predict(Input_tw_hat,(h0,c0)) # one window of (1,5,4) gives (1,2)
-            h0.detach_(), c0.detach_()
-            # Ypred_hat  = model(Input_tw_hat)
-        # append new prediction
-        ypred_hat = Ypred_hat[-1,np.newaxis].cpu().detach().numpy()
-        ypred  = np.vstack((ypred,ypred_hat))          
+            # append new prediction
+            ypred_hat = Ypred_hat[-1,np.newaxis].cpu().detach().numpy()
+            
+            if correct_bias and i == num_samples_batch:
+                bias = ypred_hat
 
+            ypred_hat = ypred_hat - bias
+            ypred = np.vstack((ypred,ypred_hat))          
 
-        # Receive new sample and append previous prediction
-        u_i = U[i,:].unsqueeze(0)
-        input_i_hat  = torch.cat((u_i,Ypred_hat[-1,np.newaxis]),dim=1)
- 
-        # append new sample to past time window and slide window
-        input_tw_hat  = torch.cat((input_tw_hat,input_i_hat))[-num_samples_batch:,:]
-        
-        # Same for real values
-        #  y_i_real = Y[i,:].unsqueeze(0)
-        # input_i_real = torch.cat((u_i,y_i_real),dim=1)
-        # input_tw_real = torch.cat((input_tw_real,input_i_real))[-num_samples_batch:,:]
-        # Input_tw_real = get_sliding_windows(input_tw_real,window_size,device)
-        # # Input_tw_real = input_tw_real.unsqueeze(0)
-        # Ypred_real,(h1,c1) = model.forward_predict(Input_tw_real,(h1,c1))
-        # # Ypred_real_mem = model(Input_tw_real)
-        # h1.detach_(), c1.detach_()    # remove gradient information
-
-        # ypred_real     = np.vstack((ypred_real,Ypred_real[-1,np.newaxis].cpu().detach().numpy()))  
-        # ypred_mem      = np.vstack((ypred_mem,Ypred_hat_mem[-1,np.newaxis].cpu().detach().numpy()))   # no cell state passed
-        # ypred_real_mem = np.vstack((ypred_real_mem,Ypred_real_mem[-1,np.newaxis].cpu().detach().numpy()))  
+            # Receive new sample and append previous prediction
+            u_i = U[i,:].unsqueeze(0)
+            input_i_hat  = torch.cat((u_i,Ypred_hat[-1,np.newaxis]),dim=1)
+    
+            # append new sample to past time window and slide window
+            input_tw_hat  = torch.cat((input_tw_hat,input_i_hat))[-num_samples_batch:,:]
             
     fig, ax = plt.subplots(2,1)
     for m in range(2):
-        ax[m].plot(y[1:,m],label='ytrue')
-        # ax[m].plot(ypred_real[:,m],label='yreal_in')
-        # ax[m].plot(ypred_real_mem[:,m],label='yreal_in_mem')
-        # ax[m].plot(ypred[:,m],label='ypred_in')
+        ax[m].plot(y[num_samples_batch:,m],label='ytrue')
         ax[m].plot(ypred[:,m],label='ypred_in')
-        # ax[m].plot(ypred_mem[:,m],label='ypred_in_mem')
         ax[m].grid()
     ax[0].legend()
     plt.show()

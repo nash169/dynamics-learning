@@ -38,33 +38,22 @@ class LSTM(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-    def forward(self, X):
-        batch_size = X.size(0)
-        # Initialize hidden state vector and cell state
-        h0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(X.device)
-        c0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(X.device)
+    def forward(self, X, hidden=None):
+        h0, c0 = self.initialize_states(batch_size=X.size(0)) if hidden is None else hidden
+        
+        output, hidden = self.lstm(X,(h0, c0))
+        # output, hidden = self.lstm(X, (h0.detach(), c0.detach()))
 
-        # output, _ = self.lstm(X, (h0.detach(), c0.detach()))
-        output, _ = self.lstm(X, (h0, c0))
-        output = self.fc_o2y(output[:, -1, :])
-        output = F.relu(output)
-        output = self.fc_y2c(output)
-
-        return output
-    
-    def initialize_states(self,batch_size):
-        h0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(self.device)
-        c0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(self.device)
-        return (h0, c0)
-
-    def forward_predict(self, X, hidden):
-        # output, _ = self.lstm(X, (h0.detach(), c0.detach()))
-        output, hidden = self.lstm(X,hidden)
         output = self.fc_o2y(output[:, -1, :])
         output = F.relu(output)
         output = self.fc_y2c(output)
 
         return output, hidden
+
+    def initialize_states(self,batch_size):
+        h0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(self.device)
+        c0 = torch.zeros(self.D*self.layer_dim, batch_size, self.hidden_dim).to(self.device)
+        return (h0, c0)
 
     
     def process_input(self, x, window_size, offset, y=None, time=None):
@@ -94,6 +83,15 @@ class LSTM(nn.Module):
 
         return X[1:].float(), Y[1:,:].float(), t
     
+    
+    def plot_loss(self,loss):
+        plt.subplots(figsize=(5,4))
+        plt.plot(loss)
+        plt.ylabel('MSE loss')
+        plt.xlabel('Epochs')
+        plt.tight_layout()
+        plt.show()
+
     def plot_loss(self,loss):
         plt.subplots(figsize=(5,4))
         plt.plot(loss)
@@ -163,6 +161,14 @@ class LSTM(nn.Module):
         torch.cuda.empty_cache()
         self.evaluate_model(model)
         return model, loss_log
+
+    def plot_loss(self,loss):
+        plt.subplots(figsize=(5,4))
+        plt.plot(loss)
+        plt.ylabel('MSE loss')
+        plt.xlabel('Epochs')
+        plt.tight_layout()
+        plt.show()
 
     def plot_prediction(self):
 
