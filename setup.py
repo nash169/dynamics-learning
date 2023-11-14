@@ -25,11 +25,11 @@ setup(
         "numpy",                # math
         "matplotlib",           # plotting
         "torch",                # net framework
+        "torchdiffeq",          # ode integration
     ],
     extras_require={
         "pytorch": [
             "torchvision",      # net framework GPU
-            "tensorboard"       # visualizations
         ],
         "dev": [
             "pylint",           # python linter

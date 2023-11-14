@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
 from .feedforward import FeedForward
-from .lstm import LSTM
+from .rnn import RNN
 
-__all__ = ["FeedForward", "LSTM"]
+__all__ = ["FeedForward", "RNN"]
