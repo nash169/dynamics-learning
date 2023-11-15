@@ -25,7 +25,7 @@ train_y = torch.from_numpy(data[params['window_size']::params['window_step']]).f
 train_y = train_y.reshape(-1,params['dimension'])
 
 # model
-model = RNN(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers'])
+model = RNN(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
 
 # train
 optimizer = torch.optim.Adam(model.parameters(), lr=params['train']['learning_rate'], weight_decay=params['train']['weight_decay'])
@@ -50,6 +50,10 @@ for epoch in range(params['train']['num_epochs']):
 
 # save
 TorchHelper.save(model, 'models/'+ds_name)
+
+# move data to cpu
+train_x = train_x.cpu()
+train_y = train_y.cpu()
 
 # plot loss
 fig, ax = plt.subplots()

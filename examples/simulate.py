@@ -34,7 +34,7 @@ t = torch.arange(0.0, params['simulate']['duration'], params['step_size'])
 
 # solution (time, trajectory, dimension)
 with torch.no_grad():
-    x = odeint(ds, x0, t)
+    x = odeint(ds, x0, t).cpu()
 np.save('data/'+ds_name, x)
 
 # plot
