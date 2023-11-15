@@ -12,10 +12,9 @@ Regression of Dynamical Systems (DS) with EMG control input.
 - All figures saved under `media/`
 
 ## ToDo
-- test the entire structure with GPU
-- make scripts modular with respect to the dynamics
+- make scripts modular with respect to the dynamics and approximators
 - define how to add controllers to dynamics without breaking `torchdiffeq`
-- make rnn regression work for the very the Spiral dynamics
+- make rnn regression work for the very the Spiral dynamics (in progress)
 - implement **NODE**, **LSTM** and **Transformer** models
 
 ## Useful link
