@@ -12,12 +12,13 @@ Regression of Dynamical Systems (DS) with EMG control input.
 - All figures saved under `media/`
 
 ## ToDo
-- make scripts modular with respect to the dynamics and approximators
 - define how to add controllers to dynamics without breaking `torchdiffeq`
 - make rnn regression work for the very the Spiral dynamics (in progress)
-- implement **NODE**, **LSTM** and **Transformer** models
+- implement **NODE** and **Transformer** models
+- test `proj_size` option for **LSTM**
+- add initial padding to the training set
 
-## Useful link
+## Useful links
 - PyTorch ODE solver: https://github.com/rtqichen/torchdiffeq/tree/master
 - NeuralODE example: https://github.com/rtqichen/torchdiffeq/blob/master/examples/ode_demo.py
 - DS learning via vector fields: https://towardsdatascience.com/deep-learning-for-dynamics-the-intuitions-20a67942dfbc
@@ -29,6 +30,7 @@ Regression of Dynamical Systems (DS) with EMG control input.
 - PyTorch Transformers doc: https://pytorch.org/docs/stable/generated/torch.nn.Transformer.html
 - Interesting paper to check: https://arxiv.org/abs/2010.03957
 - DS learning via LSTM: https://towardsdatascience.com/a-long-short-term-memory-network-to-model-nonlinear-dynamic-systems-72f703885818
+- Nice explanation of LSTM: https://colah.github.io/posts/2015-08-Understanding-LSTMs/
 
 ## Dynamics
 - Spiral
@@ -68,5 +70,4 @@ python3 examples/test.py
 ## To Check
 - https://machinelearningmastery.com/lstm-for-time-series-prediction-in-pytorch/
 - https://cnvrg.io/pytorch-lstm/
-- https://colah.github.io/posts/2015-08-Understanding-LSTMs/
 - https://machinelearningmastery.com/an-introduction-to-recurrent-neural-networks-and-the-math-that-powers-them/
