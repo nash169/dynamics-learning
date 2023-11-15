@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-from .feedforward import FeedForward
+from .node import NODE
 from .rnn import RNN
 from .lstm import LSTM
 
-__all__ = ["FeedForward", "RNN", "LSTM"]
+__all__ = ["NODE", "RNN", "LSTM"]

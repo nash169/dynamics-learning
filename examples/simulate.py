@@ -31,9 +31,9 @@ else:
     sys.exit(0)
 
 # initial state
-x0 = TorchHelper.grid_uniform(params['simulate']['grid_center'], 
-                              params['simulate']['grid_length'][0], 
-                              params['simulate']['grid_length'][1], 
+x0 = TorchHelper.grid_uniform(params['simulate']['grid_center'],
+                              params['simulate']['grid_length'][0],
+                              params['simulate']['grid_length'][1],
                               params['simulate']['num_trajectories']).to(device)
 
 # integration timeline
@@ -48,8 +48,8 @@ np.save('data/'+ds_name, x)
 fig = plt.figure()
 ax = fig.add_subplot(111)
 for i in range(params['simulate']['num_trajectories']):
-    ax.scatter(x[0,i,0], x[0,i,1], c='k')
-    ax.plot(x[:,i,0], x[:,i,1])
+    ax.scatter(x[0, i, 0], x[0, i, 1], c='k')
+    ax.plot(x[:, i, 0], x[:, i, 1])
 fig.tight_layout()
 fig.savefig("media/"+ds_name+"_train.png", format="png", dpi=100, bbox_inches="tight")
 fig.clf()

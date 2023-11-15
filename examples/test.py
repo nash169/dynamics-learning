@@ -31,9 +31,9 @@ else:
     sys.exit(0)
 
 # initial state
-x0 = TorchHelper.grid_uniform(params['test']['grid_center'], 
-                              params['test']['grid_length'][0], 
-                              params['test']['grid_length'][1], 
+x0 = TorchHelper.grid_uniform(params['test']['grid_center'],
+                              params['test']['grid_length'][0],
+                              params['test']['grid_length'][1],
                               params['test']['num_trajectories']).to(device)
 
 # integration timeline
@@ -42,7 +42,7 @@ t = torch.arange(0.0, params['test']['duration'], params['step_size']).to(device
 # solution (time, trajectory, dimension)
 with torch.no_grad():
     x = odeint(ds, x0, t)
-x = x.permute(1,0,2)
+x = x.permute(1, 0, 2)
 
 # model
 if params['model']['net'] == 'rnn':
@@ -55,13 +55,13 @@ else:
 TorchHelper.load(model, 'models/'+ds_name+'_'+params['model']['net'])
 
 # generate model trajectories
-x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension']).repeat(1,params['window_size'],1)
+x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension']).repeat(1, params['window_size'], 1)
 # this solution is more realistic but thens it is better to insert some sample like this one in the training set
 # x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension'])
-# x_net = x[:,:params['window_size'],:]
+# x_net = x[:, :params['window_size'], :]
 with torch.no_grad():
     for _ in range(len(t)-1):
-        x_net = torch.cat((x_net, model(x_net[:,-params['window_size']:, :]).reshape(params['test']['num_trajectories'], 1, params['dimension'])), dim=1)
+        x_net = torch.cat((x_net, model(x_net[:, -params['window_size']:, :]).reshape(params['test']['num_trajectories'], 1, params['dimension'])), dim=1)
 
 # move data to cpu
 x = x.cpu()
@@ -72,9 +72,9 @@ fig = plt.figure()
 ax = fig.add_subplot(111)
 # colors = plt.cm.get_cmap('hsv', params['test']['num_trajectories'])
 for i in range(params['test']['num_trajectories']):
-    ax.scatter(x[i,0,0], x[i,0,1], c='k')
-    ax.plot(x[i,:,0], x[i,:,1], linewidth=2.0) # color=colors(i)
-    ax.plot(x_net[i,:,0], x_net[i,:,1], linestyle='dashed', linewidth=2.0, color='k')
+    ax.scatter(x[i, 0, 0], x[i, 0, 1], c='k')
+    ax.plot(x[i, :, 0], x[i, :, 1], linewidth=2.0)  # color=colors(i)
+    ax.plot(x_net[i, :, 0], x_net[i, :, 1], linestyle='dashed', linewidth=2.0, color='k')
 fig.tight_layout()
 fig.savefig("media/"+ds_name+'_'+params['model']['net']+"_test.png", format="png", dpi=100, bbox_inches="tight")
 fig.clf()
