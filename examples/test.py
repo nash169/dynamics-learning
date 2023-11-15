@@ -4,11 +4,12 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
+import sys
 
 from torchdiffeq import odeint
 
-from emg_regression.dynamics.spiral import Spiral
-from emg_regression.approximators.rnn import RNN
+from emg_regression.dynamics import Spiral, SphericalPendulum
+from emg_regression.approximators import RNN, LSTM
 from emg_regression.utils.torch_helper import TorchHelper
 
 # set torch device
@@ -21,7 +22,13 @@ with open("configs/"+ds_name+".yaml", "r") as yamlfile:
     params = yaml.load(yamlfile, Loader=yaml.SafeLoader)
 
 # dynamics
-ds = Spiral().to(device)
+if ds_name == 'spiral':
+    ds = Spiral().to(device)
+elif ds_name == 'spherical_pendulum':
+    ds = SphericalPendulum().to(device)
+else:
+    print("DS not supported.")
+    sys.exit(0)
 
 # initial state
 x0 = TorchHelper.grid_uniform(params['test']['grid_center'], 
@@ -30,7 +37,7 @@ x0 = TorchHelper.grid_uniform(params['test']['grid_center'],
                               params['test']['num_trajectories']).to(device)
 
 # integration timeline
-t = torch.arange(0.0, params['test']['duration'], params['step_size'])
+t = torch.arange(0.0, params['test']['duration'], params['step_size']).to(device)
 
 # solution (time, trajectory, dimension)
 with torch.no_grad():
@@ -38,8 +45,14 @@ with torch.no_grad():
 x = x.permute(1,0,2)
 
 # model
-model = RNN(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
-TorchHelper.load(model, 'models/'+ds_name)
+if params['model']['net'] == 'rnn':
+    model = RNN(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
+elif params['model']['net'] == 'lstm':
+    model = LSTM(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
+else:
+    print("Function approximator not supported.")
+    sys.exit(0)
+TorchHelper.load(model, 'models/'+ds_name+'_'+params['model']['net'])
 
 # generate model trajectories
 x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension']).repeat(1,params['window_size'],1)
@@ -63,5 +76,5 @@ for i in range(params['test']['num_trajectories']):
     ax.plot(x[i,:,0], x[i,:,1], linewidth=2.0) # color=colors(i)
     ax.plot(x_net[i,:,0], x_net[i,:,1], linestyle='dashed', linewidth=2.0, color='k')
 fig.tight_layout()
-fig.savefig("media/"+ds_name+"_test.png", format="png", dpi=100, bbox_inches="tight")
+fig.savefig("media/"+ds_name+'_'+params['model']['net']+"_test.png", format="png", dpi=100, bbox_inches="tight")
 fig.clf()

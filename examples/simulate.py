@@ -4,10 +4,11 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
+import sys
 
 from torchdiffeq import odeint
 
-from emg_regression.dynamics.spiral import Spiral
+from emg_regression.dynamics import Spiral, SphericalPendulum
 from emg_regression.approximators.rnn import RNN
 from emg_regression.utils.torch_helper import TorchHelper
 
@@ -20,8 +21,14 @@ ds_name = 'spiral'
 with open("configs/"+ds_name+".yaml", "r") as yamlfile:
     params = yaml.load(yamlfile, Loader=yaml.SafeLoader)
 
-# Dynamics
-ds = Spiral().to(device)
+# dynamics
+if ds_name == 'spiral':
+    ds = Spiral().to(device)
+elif ds_name == 'spherical_pendulum':
+    ds = SphericalPendulum().to(device)
+else:
+    print("DS not supported.")
+    sys.exit(0)
 
 # initial state
 x0 = TorchHelper.grid_uniform(params['simulate']['grid_center'], 
@@ -30,7 +37,7 @@ x0 = TorchHelper.grid_uniform(params['simulate']['grid_center'],
                               params['simulate']['num_trajectories']).to(device)
 
 # integration timeline
-t = torch.arange(0.0, params['simulate']['duration'], params['step_size'])
+t = torch.arange(0.0, params['simulate']['duration'], params['step_size']).to(device)
 
 # solution (time, trajectory, dimension)
 with torch.no_grad():

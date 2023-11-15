@@ -1,5 +1,5 @@
 dimension: 2
-order: first
+order: second
 step_size: 0.01
 window_size: 10
 window_step: 1
@@ -24,6 +24,6 @@ test:
   grid_center: [0.0, 0.0]
 
 model:
-  net: lstm
+  net: rnn
   hidden_dim: 128
   num_layers: 2

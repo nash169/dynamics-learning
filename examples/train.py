@@ -4,8 +4,9 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import yaml
+import sys
 
-from emg_regression.approximators.rnn import RNN
+from emg_regression.approximators import RNN, LSTM
 from emg_regression.utils.torch_helper import TorchHelper
 
 # set torch device
@@ -25,7 +26,13 @@ train_y = torch.from_numpy(data[params['window_size']::params['window_step']]).f
 train_y = train_y.reshape(-1,params['dimension'])
 
 # model
-model = RNN(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
+if params['model']['net'] == 'rnn':
+    model = RNN(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
+elif params['model']['net'] == 'lstm':
+    model = LSTM(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
+else:
+    print("Function approximator not supported.")
+    sys.exit(0)
 
 # train
 optimizer = torch.optim.Adam(model.parameters(), lr=params['train']['learning_rate'], weight_decay=params['train']['weight_decay'])
@@ -49,7 +56,7 @@ for epoch in range(params['train']['num_epochs']):
        print("Epoch ", epoch, ": ", loss.item())
 
 # save
-TorchHelper.save(model, 'models/'+ds_name)
+TorchHelper.save(model, 'models/'+ds_name+'_'+params['model']['net'])
 
 # move data to cpu
 train_x = train_x.cpu()
@@ -59,7 +66,7 @@ train_y = train_y.cpu()
 fig, ax = plt.subplots()
 ax.plot(np.arange(params['train']['num_epochs']), loss_log)
 fig.tight_layout()
-fig.savefig("media/"+ds_name+"_loss.png", format="png", dpi=100, bbox_inches="tight")
+fig.savefig("media/"+ds_name+'_'+params['model']['net']+"_loss.png", format="png", dpi=100, bbox_inches="tight")
 fig.clf()
 
 # plot to check dataset build

@@ -2,5 +2,6 @@
 
 from .feedforward import FeedForward
 from .rnn import RNN
+from .lstm import LSTM
 
-__all__ = ["FeedForward", "RNN"]
+__all__ = ["FeedForward", "RNN", "LSTM"]
