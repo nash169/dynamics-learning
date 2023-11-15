@@ -1,28 +1,28 @@
 dimension: 2
 step_size: 0.01
-window_size: 5
+window_size: 10
 window_step: 1
 
 simulate:
   num_trajectories: 10
-  duration: 10.0
-  grid_length: [1.0, 1.0]
+  duration: 25.0
+  grid_length: [2.0, 2.0]
   grid_center: [0.0, 0.0]
 
 train:
-  num_epochs: 100
+  num_epochs: 200
   learning_rate: 1.0e-2
   weight_decay: 1.0e-6
   dynamic_lr: false
   verbose: true
 
 test:
-  num_trajectories: 5
-  duration: 2.0
-  grid_length: [1.0, 1.0]
+  num_trajectories: 1
+  duration: 25.0
+  grid_length: [2.0, 2.0]
   grid_center: [0.0, 0.0]
 
 model:
   net: rnn
-  hidden_dim: 10
+  hidden_dim: 128
   num_layers: 2
