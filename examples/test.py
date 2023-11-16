@@ -9,7 +9,7 @@ import sys
 from torchdiffeq import odeint
 
 from emg_regression.dynamics import Spiral, SphericalPendulum
-from emg_regression.approximators import RNN, LSTM
+from emg_regression.approximators import RNN, LSTM, NODE
 from emg_regression.utils.torch_helper import TorchHelper
 
 # set torch device
@@ -49,19 +49,25 @@ if params['model']['net'] == 'rnn':
     model = RNN(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
 elif params['model']['net'] == 'lstm':
     model = LSTM(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
+elif params['model']['net'] == 'node':
+    model = NODE(input_size=params['dimension'], structure=[params['model']['hidden_dim']]*params['model']['num_layers'], output_size=params['dimension'], time_step=params['step_size']).to(device)
 else:
     print("Function approximator not supported.")
     sys.exit(0)
-TorchHelper.load(model, 'models/'+ds_name+'_'+params['model']['net'])
+TorchHelper.load(model, 'models/'+ds_name+'_'+params['model']['net'], device)
 
 # generate model trajectories
-x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension']).repeat(1, params['window_size'], 1)
-# this solution is more realistic but thens it is better to insert some sample like this one in the training set
-# x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension'])
-# x_net = x[:, :params['window_size'], :]
 with torch.no_grad():
-    for _ in range(len(t)-1):
-        x_net = torch.cat((x_net, model(x_net[:, -params['window_size']:, :]).reshape(params['test']['num_trajectories'], 1, params['dimension'])), dim=1)
+    if params['model']['net'] == 'node':
+        x_net = model(x0, t).permute(1, 0, 2)
+    else:
+        x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension']).repeat(1, params['window_size'], 1)
+        # this solution is more realistic but thens it is better to insert some sample like this one in the training set
+        # x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension'])
+        # x_net = x[:, :params['window_size'], :]
+        with torch.no_grad():
+            for _ in range(len(t)-1):
+                x_net = torch.cat((x_net, model(x_net[:, -params['window_size']:, :]).reshape(params['test']['num_trajectories'], 1, params['dimension'])), dim=1)
 
 # move data to cpu
 x = x.cpu()
