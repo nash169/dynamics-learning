@@ -17,6 +17,7 @@ Regression of Dynamical Systems (DS) with EMG control input.
 - implement **NODE** and **Transformer** models
 - test `proj_size` option for **LSTM**
 - add initial padding to the training set
+- fix uniform sampling withing hypercube
 
 ## Useful links
 - PyTorch ODE solver: https://github.com/rtqichen/torchdiffeq/tree/master
