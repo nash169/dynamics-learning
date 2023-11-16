@@ -4,6 +4,7 @@ Regression of Dynamical Systems (DS) with EMG control input.
 ## Changelog
 - Introduced `torchdiffeq`, PyTorch-based ODE solver offering various integrators and better parallelization for multi-trajectory sampling
 - Moved to fully differentiable PyTorch-based dynamics for GPU parallelization support and compatibility with `torchdiffeq`
+- Second-order dynamics written in state space representation ODE solver compatibility
 - High performance generation of sliding window dataset via PyTorch `unfold` API
 - Added first-order dynamics, **Spiral** and **Lorenz**, for testing on easier case
 - Temporary removed **LSTM** model and substituted it with simpler **RNN** model for understanding better the mechanism
@@ -13,11 +14,9 @@ Regression of Dynamical Systems (DS) with EMG control input.
 
 ## ToDo
 - define how to add controllers to dynamics without breaking `torchdiffeq`
-- make rnn regression work for the very the Spiral dynamics (in progress)
-- implement **NODE** and **Transformer** models
+- implement **Transformer** model
 - test `proj_size` option for **LSTM**
-- add initial padding to the training set
-- fix uniform sampling withing hypercube
+- add initial padding to the training set (?)
 
 ## Useful links
 - PyTorch ODE solver: https://github.com/rtqichen/torchdiffeq/tree/master

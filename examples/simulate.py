@@ -8,7 +8,7 @@ import sys
 
 from torchdiffeq import odeint
 
-from emg_regression.dynamics import Spiral, SphericalPendulum
+from emg_regression.dynamics import Spiral, Pendulum
 from emg_regression.approximators.rnn import RNN
 from emg_regression.utils.torch_helper import TorchHelper
 
@@ -17,23 +17,22 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 # load configuration
-ds_name = 'spiral'
+ds_name = 'pendulum'
 with open("configs/"+ds_name+".yaml", "r") as yamlfile:
     params = yaml.load(yamlfile, Loader=yaml.SafeLoader)
 
 # dynamics
 if ds_name == 'spiral':
     ds = Spiral().to(device)
-elif ds_name == 'spherical_pendulum':
-    ds = SphericalPendulum().to(device)
+elif ds_name == 'pendulum':
+    ds = Pendulum().to(device)
 else:
     print("DS not supported.")
     sys.exit(0)
 
 # initial state
-x0 = TorchHelper.grid_uniform(params['simulate']['grid_center'],
-                              params['simulate']['grid_length'][0],
-                              params['simulate']['grid_length'][1],
+x0 = TorchHelper.grid_uniform(torch.tensor(params['simulate']['grid_center']), 
+                              torch.tensor(params['simulate']['grid_size']),
                               params['simulate']['num_trajectories']).to(device)
 
 # integration timeline

@@ -4,20 +4,27 @@ import torch
 import torch.nn as nn
 
 class Pendulum(nn.Module):
-    def __init__(self, length):
+    def __init__(self, length=1.0):
         super(Pendulum, self).__init__()
-        
+
         # params
         self._length = length
-        self._gravity = 9.81
+        self.gravity = 9.81
     
-    def forward(self, t, x):
+    def forward(self, t, x): # theta x[0], phi x[1]
         y = torch.zeros_like(x)
-        y[:,0] = x[:,1]
-        y[:,1] = self.gravity/self.length*x[:,0].sin()
-        if hasattr(self,'controller'):
-            y[:,1] += self.controller(t,x)
+        y[:,:2] = x[:,-2:]
+        y[:,2] = -2*x[:,2]*x[:,3]/(x[:,1].tan()+1e-3)
+        y[:,3] = (x[:,2].square()*x[:,1].cos() - self.gravity/self.length)*x[:,1].sin()
 
+        if hasattr(self,'controller'):
+            y[:,2:] += self.controller(t,x)
+
+        return y
+    
+    def gravity(self, x):
+        y = torch.zeros_like(x)
+        y[:,3] = self.gravity/self.length*x[:,1].sin()
 
     @property
     def length(self):

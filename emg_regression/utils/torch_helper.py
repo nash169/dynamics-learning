@@ -25,7 +25,5 @@ class TorchHelper():
             p.data.fill_(0)
             
     @staticmethod
-    def grid_uniform(center, la, lb, samples=1):
-        a = [center[0] - la, center[1] - lb]
-        b = [center[0] + la, center[1] + lb]
-        return torch.cat((torch.FloatTensor(samples, 1).uniform_(a[0], b[0]), torch.FloatTensor(samples, 1).uniform_(a[1], b[1])), dim=1)
+    def grid_uniform(center, size, samples=1):
+        return (torch.rand(samples, center.shape[0])-0.5)*size + center

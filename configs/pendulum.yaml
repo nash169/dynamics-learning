@@ -6,9 +6,9 @@ window_step: 1
 
 simulate:
   num_trajectories: 10
-  duration: 25.0
-  grid_length: [2.0, 2.0]
-  grid_center: [0.0, 0.0]
+  duration: 5.0
+  grid_center: [0.0, 0.0, 0.0, 0.0]
+  grid_size: [1.0, 1.0, 1.0, 1.0]
 
 train:
   num_epochs: 200
@@ -20,8 +20,8 @@ train:
 test:
   num_trajectories: 1
   duration: 25.0
-  grid_length: [2.0, 2.0]
-  grid_center: [0.0, 0.0]
+  grid_center: [0.0, 0.0, 0.0, 0.0]
+  grid_size: [1.0, 1.0, 1.0, 1.0]
 
 model:
   net: rnn
