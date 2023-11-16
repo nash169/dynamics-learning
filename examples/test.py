@@ -20,6 +20,8 @@ device = torch.device("cuda" if use_cuda else "cpu")
 ds_name = 'spiral'
 with open("configs/"+ds_name+".yaml", "r") as yamlfile:
     params = yaml.load(yamlfile, Loader=yaml.SafeLoader)
+if params['model']['net'] == 'node':
+    params['window_step'] = 1
 
 # dynamics
 if ds_name == 'spiral':

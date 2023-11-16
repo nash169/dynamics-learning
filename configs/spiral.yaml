@@ -1,20 +1,20 @@
 dimension: 2
 order: first
 step_size: 0.01
-window_size: 1 # for node this must be 1
+window_size: 10 # for node this must be 1
 window_step: 1
 
 simulate:
-  num_trajectories: 1
-  duration: 10.0
+  num_trajectories: 10
+  duration: 25.0
   grid_length: [2.0, 2.0]
   grid_center: [0.0, 0.0]
 
 train:
-  num_epochs: 200
+  num_epochs: 500
   learning_rate: 1.0e-2
   weight_decay: 1.0e-6
-  dynamic_lr: false
+  dynamic_lr: true
   verbose: true
 
 test:
@@ -24,6 +24,6 @@ test:
   grid_center: [0.0, 0.0]
 
 model:
-  net: node
-  hidden_dim: 128
+  net: lstm
+  hidden_dim: 256
   num_layers: 2
