@@ -14,26 +14,38 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 
 # load configuration
-ds_name = 'spiral'
+ds_name = 'pendulum'
 with open("configs/"+ds_name+".yaml", "r") as yamlfile:
     params = yaml.load(yamlfile, Loader=yaml.SafeLoader)
 if params['model']['net'] == 'node':
     params['window_step'] = 1
 
+if params['order'] == 'first':
+    input_dim = params['dimension']
+elif params['order'] == 'second':
+    input_dim = 2*params['dimension']
+output_dim = input_dim
+if params['controlled']:
+    input_dim += params['dimension']
+
 # data
-data = np.load('data/'+ds_name+'.npy')
+data = np.load('data/'+ds_name+'.npy')[:,:,:input_dim]
+if params['train']['padding']: # this not make sense for autonomous systems
+    data = np.append(np.repeat(data[0][np.newaxis,:],10,axis=0), data, axis=0)
 train_x = torch.from_numpy(data).float().to(device)
-train_x = train_x.unfold(0, params['window_size'], params['window_step']).permute(0, 1, 3, 2)[:-1].reshape(-1, params['window_size'], params['dimension'])
+train_x = train_x.unfold(0, params['window_size'], params['window_step']).permute(0, 1, 3, 2)[:-1].reshape(-1, params['window_size'], input_dim)
+
+train_y = train_x[params['window_size']::params['window_step']]
 train_y = torch.from_numpy(data[params['window_size']::params['window_step']]).float().to(device)
-train_y = train_y.reshape(-1, params['dimension'])
+train_y = train_y.reshape(-1, input_dim)[:,:output_dim]
 
 # model
 if params['model']['net'] == 'rnn':
-    model = RNN(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
+    model = RNN(input_size=input_dim, hidden_dim=params['model']['hidden_dim'], output_size=output_dim, n_layers=params['model']['num_layers']).to(device)
 elif params['model']['net'] == 'lstm':
-    model = LSTM(input_size=params['dimension'], hidden_dim=params['model']['hidden_dim'], output_size=params['dimension'], n_layers=params['model']['num_layers']).to(device)
+    model = LSTM(input_size=input_dim, hidden_dim=params['model']['hidden_dim'], output_size=output_dim, n_layers=params['model']['num_layers']).to(device)
 elif params['model']['net'] == 'node':
-    model = NODE(input_size=params['dimension'], structure=[params['model']['hidden_dim']]*params['model']['num_layers'], output_size=params['dimension'], time_step=params['step_size']).to(device)
+    model = NODE(input_size=input_dim, structure=[params['model']['hidden_dim']]*params['model']['num_layers'], output_size=output_dim, time_step=params['step_size']).to(device)
     train_x = train_x[:, -1, :]
 else:
     print("Function approximator not supported.")
@@ -74,14 +86,15 @@ fig.tight_layout()
 fig.savefig("media/"+ds_name+'_'+params['model']['net']+"_loss.png", format="png", dpi=100, bbox_inches="tight")
 fig.clf()
 
-# plot to check dataset build
-fig, ax = plt.subplots()
-if params['model']['net'] == 'node':
-    ax.scatter(train_x[0, 0], train_x[0, 1], c='r')
-else:
-    ax.scatter(train_x[0, :, 0], train_x[0, :, 1], c='r')
-ax.scatter(train_y[0, 0], train_y[0, 1], c='g')
-ax.plot(data[:20, 0, 0], data[:20, 0, 1], c='b')
-fig.tight_layout()
-fig.savefig("media/"+ds_name+"_check.png", format="png", dpi=100, bbox_inches="tight")
-fig.clf()
+if params['dimension'] == 2:
+    # plot to check dataset build
+    fig, ax = plt.subplots()
+    if params['model']['net'] == 'node':
+        ax.scatter(train_x[0, 0], train_x[0, 1], c='r')
+    else:
+        ax.scatter(train_x[0, :, 0], train_x[0, :, 1], c='r')
+    ax.scatter(train_y[0, 0], train_y[0, 1], c='g')
+    ax.plot(data[:20, 0, 0], data[:20, 0, 1], c='b')
+    fig.tight_layout()
+    fig.savefig("media/"+ds_name+"_check.png", format="png", dpi=100, bbox_inches="tight")
+    fig.clf()
