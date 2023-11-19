@@ -59,11 +59,11 @@ if params['test']['train_data']:
     params['test']['num_trajectories'] = x0.shape[0]
 else:
     x0 = TorchHelper.grid_uniform(torch.tensor(params['test']['grid_center']),
-                                torch.tensor(params['test']['grid_size']),
-                                params['test']['num_trajectories']).to(device)
+                                  torch.tensor(params['test']['grid_size']),
+                                  params['test']['num_trajectories']).to(device)
     if params['simulate']['fixed_state']:
         data = torch.from_numpy(np.load('data/'+ds_name+'.npy')[0][0]).float().to(device)
-        x0.data[:,:input_dim] = data[:input_dim]
+        x0.data[:, :input_dim] = data[:input_dim]
 
 # integration timeline
 t = torch.arange(0.0, params['test']['duration'], params['step_size']).to(device)
@@ -88,18 +88,18 @@ TorchHelper.load(model, 'models/'+ds_name+'_'+params['model']['net'], device)
 # generate model trajectories
 with torch.no_grad():
     if params['model']['net'] == 'node':
-        x_net = model(x0[:,:input_dim], t).permute(1, 0, 2)
+        x_net = model(x0[:, :input_dim], t).permute(1, 0, 2)
     else:
-        x_net = x0[:,:input_dim].reshape(params['test']['num_trajectories'], 1, input_dim).repeat(1, params['window_size'], 1)
+        x_net = x0[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim).repeat(1, params['window_size'], 1)
         # this solution is more realistic but then it is better to insert some sample like this one in the training set
-        # x_net = x0.reshape(params['test']['num_trajectories'], 1, params['dimension'])
+        # x_net = x0[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim)
         # x_net = x[:, :params['window_size'], :]
         for i in range(len(t)-1):
-            y_net = model(x_net[:, -params['window_size']:, :]) # .reshape(params['test']['num_trajectories'], 1, output_dim)
+            y_net = model(x_net[:, -params['window_size']:, :])  # .reshape(params['test']['num_trajectories'], 1, output_dim)
             if params['controlled']:
-                y_net = torch.cat((y_net, x0[:,output_dim:]), dim=1)
+                y_net = torch.cat((y_net, x0[:, output_dim:]), dim=1)
                 ctr(t[i+1], y_net)
-            x_net = torch.cat((x_net, y_net[:,:input_dim].reshape(params['test']['num_trajectories'], 1, input_dim)), dim=1)
+            x_net = torch.cat((x_net, y_net[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim)), dim=1)
 
 # move data to cpu
 x = x.cpu()

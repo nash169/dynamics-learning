@@ -29,15 +29,15 @@ if params['controlled']:
     input_dim += params['dimension']
 
 # data
-data = np.load('data/'+ds_name+'.npy')[:,:,:input_dim]
-if params['train']['padding']: # this not make sense for autonomous systems
-    data = np.append(np.repeat(data[0][np.newaxis,:],10,axis=0), data, axis=0)
+data = np.load('data/'+ds_name+'.npy')[:, :, :input_dim]
+if params['train']['padding']:  # this not make sense for autonomous systems
+    data = np.append(np.repeat(data[0][np.newaxis, :], params['window_size'], axis=0), data, axis=0)
 train_x = torch.from_numpy(data).float().to(device)
 train_x = train_x.unfold(0, params['window_size'], params['window_step']).permute(0, 1, 3, 2)[:-1].reshape(-1, params['window_size'], input_dim)
 
 train_y = train_x[params['window_size']::params['window_step']]
 train_y = torch.from_numpy(data[params['window_size']::params['window_step']]).float().to(device)
-train_y = train_y.reshape(-1, input_dim)[:,:output_dim]
+train_y = train_y.reshape(-1, input_dim)[:, :output_dim]
 
 # model
 if params['model']['net'] == 'rnn':
