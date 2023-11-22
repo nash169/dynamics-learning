@@ -55,8 +55,7 @@ else:
 
 # initial state
 if params['test']['train_data']:
-    x0 = torch.from_numpy(np.load('data/'+ds_name+'.npy')[0]).float().to(device)[:2]
-    params['test']['num_trajectories'] = x0.shape[0]
+    x0 = torch.from_numpy(np.load('data/'+ds_name+'.npy')[0]).float().to(device)[:params['test']['num_trajectories']]
 else:
     x0 = TorchHelper.grid_uniform(torch.tensor(params['test']['grid_center']),
                                   torch.tensor(params['test']['grid_size']),
@@ -70,8 +69,13 @@ t = torch.arange(0.0, params['test']['duration'], params['step_size']).to(device
 
 # solution (time, trajectory, dimension)
 with torch.no_grad():
-    x = odeint(ds, x0, t)
+    x = odeint(ds, x0, t, method='rk4')
 x = x.permute(1, 0, 2)
+
+if params['controlled']:
+    u = torch.zeros(x.shape[0], x.shape[1], params['dimension'])
+    u[:-1, :, :] = x[1:, :, input_dim:input_dim+params['dimension']]
+    x[:, :, input_dim:input_dim+params['dimension']] = u
 
 # model
 if params['model']['net'] == 'rnn':
@@ -93,12 +97,12 @@ with torch.no_grad():
         x_net = x0[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim).repeat(1, params['window_size'], 1)
         # this solution is more realistic but then it is better to insert some sample like this one in the training set
         # x_net = x0[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim)
-        # x_net = x[:, :params['window_size'], :]
-        for i in range(len(t)-1):
+        # x_net = x[:, :params['window_size'], :input_dim]
+        for i in range(len(t)):
             y_net = model(x_net[:, -params['window_size']:, :])  # .reshape(params['test']['num_trajectories'], 1, output_dim)
             if params['controlled']:
                 y_net = torch.cat((y_net, x0[:, output_dim:]), dim=1)
-                ctr(t[i+1], y_net)
+                ctr(t[i], y_net)
             x_net = torch.cat((x_net, y_net[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim)), dim=1)
 
 # move data to cpu
