@@ -12,7 +12,6 @@ class TorchHelper():
     @staticmethod
     def load(model, path, device):
         model.load_state_dict(torch.load(os.path.join('', '{}.pt'.format(path)), map_location=torch.device(device)))
-        model.eval()
 
     @staticmethod
     def set_grad(model, grad):
@@ -23,7 +22,7 @@ class TorchHelper():
     def set_zero(model):
         for p in model.parameters():
             p.data.fill_(0)
-            
+
     @staticmethod
     def grid_uniform(center, size, samples=1):
         return (torch.rand(samples, center.shape[0])-0.5)*size + center

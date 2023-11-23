@@ -64,6 +64,13 @@ else:
         data = torch.from_numpy(np.load('data/'+ds_name+'.npy')[0][0]).float().to(device)
         x0.data[:, :input_dim] = data[:input_dim]
 
+x0_net = x0[:, :input_dim]
+
+if params['train']['position'] and params['order'] == 'second':
+    x0_net = torch.cat((x0_net[:, :params['dimension']], x0_net[:, -params['dimension']:]), dim=1)
+    input_dim -= params['dimension']
+    output_dim -= params['dimension']
+
 # integration timeline
 t = torch.arange(0.0, params['test']['duration'], params['step_size']).to(device)
 
@@ -74,8 +81,8 @@ x = x.permute(1, 0, 2)
 
 if params['controlled']:
     u = torch.zeros(x.shape[0], x.shape[1], params['dimension'])
-    u[:-1, :, :] = x[1:, :, input_dim:input_dim+params['dimension']]
-    x[:, :, input_dim:input_dim+params['dimension']] = u
+    u[:-1, :, :] = x[1:, :, 2*params['dimension']:3*params['dimension']]
+    x[:, :, 2*params['dimension']:3*params['dimension']] = u
 
 # model
 if params['model']['net'] == 'rnn':
@@ -88,22 +95,23 @@ else:
     print("Function approximator not supported.")
     sys.exit(0)
 TorchHelper.load(model, 'models/'+ds_name+'_'+params['model']['net'], device)
+model.eval()
 
 # generate model trajectories
 with torch.no_grad():
     if params['model']['net'] == 'node':
-        x_net = model(x0[:, :input_dim], t).permute(1, 0, 2)
+        x_net = model(x0_net, t).permute(1, 0, 2)
     else:
-        x_net = x0[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim).repeat(1, params['window_size'], 1)
+        x_net = x0_net.reshape(params['test']['num_trajectories'], 1, input_dim).repeat(1, params['window_size'], 1)
         # this solution is more realistic but then it is better to insert some sample like this one in the training set
-        # x_net = x0[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim)
+        # x_net = x0_net.reshape(params['test']['num_trajectories'], 1, input_dim)
         # x_net = x[:, :params['window_size'], :input_dim]
         for i in range(len(t)):
             y_net = model(x_net[:, -params['window_size']:, :])  # .reshape(params['test']['num_trajectories'], 1, output_dim)
             if params['controlled']:
-                y_net = torch.cat((y_net, x0[:, output_dim:]), dim=1)
-                ctr(t[i], y_net)
-            x_net = torch.cat((x_net, y_net[:, :input_dim].reshape(params['test']['num_trajectories'], 1, input_dim)), dim=1)
+                u = ctr(t[i], torch.cat((y_net, x0[:, y_net.shape[1]:]), dim=1))[:, params['dimension']:2*params['dimension']]
+                y_net = torch.cat((y_net, u), dim=1)
+            x_net = torch.cat((x_net, y_net.reshape(params['test']['num_trajectories'], 1, input_dim)), dim=1)
 
 # move data to cpu
 x = x.cpu()

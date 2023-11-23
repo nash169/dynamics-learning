@@ -30,8 +30,14 @@ if params['controlled']:
 
 # data
 data = np.load('data/'+ds_name+'.npy')[:, :, :input_dim]
+if params['train']['position'] and params['order'] == 'second':
+    data = np.delete(data, np.arange(params['dimension'], 2*params['dimension']), axis=2)
+    input_dim -= params['dimension']
+    output_dim -= params['dimension']
+
 if params['train']['padding']:  # this not make sense for autonomous systems
     data = np.append(np.repeat(data[0][np.newaxis, :], params['window_size'], axis=0), data, axis=0)
+
 train_x = torch.from_numpy(data).float().to(device)
 train_x = train_x.unfold(0, params['window_size'], params['window_step']).permute(0, 1, 3, 2)[:-1].reshape(-1, params['window_size'], input_dim)
 
@@ -50,6 +56,9 @@ elif params['model']['net'] == 'node':
 else:
     print("Function approximator not supported.")
     sys.exit(0)
+if params['train']['load']:
+    TorchHelper.load(model, 'models/'+ds_name+'_'+params['model']['net'], device)
+    model.train()
 
 # train
 optimizer = torch.optim.Adam(model.parameters(), lr=params['train']['learning_rate'], weight_decay=params['train']['weight_decay'])

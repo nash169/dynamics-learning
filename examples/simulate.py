@@ -64,8 +64,8 @@ elif params['order'] == 'second':
 
 if params['controlled']:
     u = torch.zeros(x.shape[0], x.shape[1], params['dimension'])
-    u[:-1, :, :] = x[1:, :, input_dim:input_dim+params['dimension']]
-    x[:, :, input_dim:input_dim+params['dimension']] = u
+    u[:-1, :, :] = x[1:, :, 2*params['dimension']:3*params['dimension']]
+    x[:, :, 2*params['dimension']:3*params['dimension']] = u
 
 np.save('data/'+ds_name, x)
 

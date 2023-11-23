@@ -6,7 +6,7 @@ window_size: 10 # for node this must be 1
 window_step: 1
 
 simulate:
-  num_trajectories: 2
+  num_trajectories: 5
   duration: 5.0
   # spin, elevation, vel spin, vel elevation, ctr spin, ctr elevation
   # ctr amp spin, ctr amp elevation, ctr phase spin, ctr phase elevation
@@ -15,16 +15,19 @@ simulate:
   fixed_state: true
 
 train:
+  position: false
   padding: true
+  normalize: false
   num_epochs: 1000
-  learning_rate: 1.0e-2
+  learning_rate: 1.0e-3
   weight_decay: 0.0
   dynamic_lr: true
   verbose: true
+  load: true
 
 test:
   train_data: true
-  num_trajectories: 1
+  num_trajectories: 5
   duration: 5.0
   # spin, elevation, vel spin, vel elevation, ctr spin, ctr elevation
   # ctr amp spin, ctr amp elevation, ctr phase spin, ctr phase elevation
