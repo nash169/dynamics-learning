@@ -109,8 +109,9 @@ with torch.no_grad():
         for i in range(len(t)):
             y_net = model(x_net[:, -params['window_size']:, :])  # .reshape(params['test']['num_trajectories'], 1, output_dim)
             if params['controlled']:
-                u = ctr(t[i], torch.cat((y_net, x0[:, y_net.shape[1]:]), dim=1))[:, params['dimension']:2*params['dimension']]
-                y_net = torch.cat((y_net, u), dim=1)
+                u_net = ctr(t[i], torch.cat((y_net, x0[:, y_net.shape[1]:]), dim=1))[:, params['dimension']:2*params['dimension']]
+                # u_net = u[:, i, :].to(device)
+                y_net = torch.cat((y_net, u_net), dim=1)
             x_net = torch.cat((x_net, y_net.reshape(params['test']['num_trajectories'], 1, input_dim)), dim=1)
 
 # move data to cpu
