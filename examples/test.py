@@ -88,7 +88,7 @@ if params['controlled']:
 if params['model']['net'] == 'rnn':
     model = RNN(input_size=input_dim, hidden_dim=params['model']['hidden_dim'], output_size=output_dim, n_layers=params['model']['num_layers']).to(device)
 elif params['model']['net'] == 'lstm':
-    model = LSTM(input_size=input_dim, hidden_dim=params['model']['hidden_dim'], pre_output_size=params['model']['preoutput_size'],output_size=output_dim, n_layers=params['model']['num_layers']).to(device)
+    model = LSTM(input_size=input_dim, hidden_dim=params['model']['hidden_dim'], output_size=output_dim, n_layers=params['model']['num_layers']).to(device)
 elif params['model']['net'] == 'node':
     model = NODE(input_size=input_dim, structure=[params['model']['hidden_dim']]*params['model']['num_layers'], output_size=output_dim, time_step=params['step_size']).to(device)
 else:
