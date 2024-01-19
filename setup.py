@@ -6,14 +6,14 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="emg-regression",
+    name="dynamics-learning",
     version="1.0.0",
-    author="Carolina Correia",
-    author_email="cgprcorreia@gmail.com",
-    description="EMG Regression.",
+    author="Bernardo Fichera",
+    author_email="bernardo.fichera@gmail.com",
+    description="Investigation of different strategies for Dynamical Systems learning.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/nash169/emg-regression.git",
+    url="https://github.com/nash169/dynamics-learning.git",
     packages=find_namespace_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
