@@ -1,5 +1,5 @@
 # Dynamical Systems Learning 
-Regression of Dynamical Systems (DS) with EMG control input.
+Regression of Dynamical Systems DS.
 
 ## Changelog
 - Introduced `torchdiffeq`, PyTorch-based ODE solver offering various integrators and better parallelization for multi-trajectory sampling
