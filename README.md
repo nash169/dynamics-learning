@@ -1,4 +1,4 @@
-# EMG-Control Dynamical System Learning 
+# Dynamical Systems Learning 
 Regression of Dynamical Systems (DS) with EMG control input.
 
 ## Changelog
